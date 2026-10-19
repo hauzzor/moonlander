@@ -43,6 +43,7 @@ export function createControlledField({
   const centerAt = (x: number): Vec2 => ({ x, y: centerY + slope * x });
   const tunnel = {
     halfWidth,
+    halfWidthAt: (_x: number) => halfWidth,
     centerAt,
     headingAt: (_x: number) => Math.atan(slope),
   };

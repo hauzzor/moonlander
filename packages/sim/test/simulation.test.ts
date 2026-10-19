@@ -43,8 +43,11 @@ describe("fixed-step tunnel simulation", () => {
     expect(sim.TUNNEL_HALF_WIDTH).toBe(34);
     expect(sim.TUNNEL_CENTER_Y).toBe(60);
     expect(sim.TUNNEL_START_STRAIGHT).toBe(120);
-    expect(sim.TUNNEL_BEND_AMPLITUDE).toBe(24);
-    expect(sim.TUNNEL_MAX_SLOPE).toBe(0.35);
+    expect.soft(sim.TUNNEL_MIN_HALF_WIDTH).toBe(25);
+    expect.soft(sim.TUNNEL_MAX_HALF_WIDTH).toBe(55);
+    expect.soft(sim.TUNNEL_BEND_AMPLITUDE).toBe(150);
+    expect.soft(sim.TUNNEL_MAX_CLIMB_ANGLE).toBe((85 * Math.PI) / 180);
+    expect.soft(sim.TUNNEL_MAX_SLOPE).toBe(Math.tan(sim.TUNNEL_MAX_CLIMB_ANGLE));
     expect(sim.TUNNEL_SAMPLE_STEP).toBe(8);
     expect(sim.WALL_RADIUS).toBe(2);
     expect(sim.DAMAGE_SPEED_THRESHOLD).toBe(2);

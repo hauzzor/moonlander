@@ -25,10 +25,13 @@ export const LINEAR_DRAG = 0.35;
 export const ANGULAR_DRAG = 0.25;
 
 export const TUNNEL_HALF_WIDTH = 34;
+export const TUNNEL_MIN_HALF_WIDTH = 25;
+export const TUNNEL_MAX_HALF_WIDTH = 55;
 export const TUNNEL_CENTER_Y = 60;
 export const TUNNEL_START_STRAIGHT = 120;
-export const TUNNEL_BEND_AMPLITUDE = 24;
-export const TUNNEL_MAX_SLOPE = 0.35;
+export const TUNNEL_BEND_AMPLITUDE = 150;
+export const TUNNEL_MAX_CLIMB_ANGLE = (85 * Math.PI) / 180;
+export const TUNNEL_MAX_SLOPE = Math.tan(TUNNEL_MAX_CLIMB_ANGLE);
 export const TUNNEL_SAMPLE_STEP = 8;
 
 export const WALL_RADIUS = 2;

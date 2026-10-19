@@ -92,6 +92,7 @@ function createTunnel(seed: number): Tunnel {
   const phaseValues = phases(seed);
   return {
     halfWidth: TUNNEL_HALF_WIDTH,
+    halfWidthAt: () => TUNNEL_HALF_WIDTH,
     centerAt(x: number): Vec2 {
       if (x <= TUNNEL_START_STRAIGHT) {
         return { x, y: TUNNEL_CENTER_Y };

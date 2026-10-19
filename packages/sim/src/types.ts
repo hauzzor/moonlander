@@ -73,6 +73,7 @@ export interface CurvedWall {
 
 export interface Tunnel {
   halfWidth: number;
+  halfWidthAt(x: number): number;
   centerAt(x: number): Vec2;
   headingAt(x: number): number;
 }

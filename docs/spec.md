@@ -3,7 +3,8 @@
 ## Goal
 
 Build a complete browser game in which a Starship flies manually through a
-deterministic, enclosed, mostly horizontal tunnel that winds rightward. The
+deterministic, enclosed tunnel that winds rightward and includes near-vertical
+climbs and dives. The
 ship uses aggressive Q/W thrusters and atmospheric drag for responsive,
 damped control. The same deterministic simulation must be usable headlessly
 from Node for controller training and evaluation.
@@ -81,27 +82,41 @@ Target response:
 
 ## Tunnel
 
-The tunnel is a continuous corridor with a constant total width of `68 m`
-(`TUNNEL_HALF_WIDTH = 34`).
+The tunnel is a continuous corridor. `TUNNEL_HALF_WIDTH = 34` m is the nominal
+half-width (68 m total). The near-vertical, variable-width contract is frozen by
+T-0001; the current generator still uses vertical wall offsets at the constant
+nominal width and the previous gentle bend waveform, so its generated geometry
+is unchanged. T-0002 implements the terrain behavior described below.
 
 - The centerline starts at `TUNNEL_CENTER_Y = 60`.
 - The first `TUNNEL_START_STRAIGHT = 120` m of x is straight at `y = 60`,
-  including negative x.
-- After the straight section, the centerline bends using a seeded,
-  deterministic sum-of-sines function with a smooth C1 transition at
-  `x = 120`.
-- The absolute vertical bend is at most `TUNNEL_BEND_AMPLITUDE = 24` m from
+  including negative x, with the nominal 68 m total width.
+- After the straight section, the centerline is a seeded, deterministic,
+  x-monotonic, single-valued function of x with a smooth C1 transition at
+  `x = 120`. It never reaches 90° and never doubles back.
+- The absolute vertical bend is at most `TUNNEL_BEND_AMPLITUDE = 150` m from
   `y = 60`.
-- The absolute centerline slope is at most `TUNNEL_MAX_SLOPE = 0.35`.
-- Wall samples are spaced every `TUNNEL_SAMPLE_STEP = 8` m.
-- Top and bottom walls are vertical offsets from the centerline:
-  `centerY(x) ± TUNNEL_HALF_WIDTH`.
+- `TUNNEL_MAX_CLIMB_ANGLE = 85°`, expressed as `(85 * Math.PI) / 180` radians,
+  and the absolute centerline slope is at most
+  `TUNNEL_MAX_SLOPE = Math.tan(TUNNEL_MAX_CLIMB_ANGLE)`. T-0002 must also
+  guarantee at least one sampled section with `|slope| >= tan(80°)` in every
+  1,000 m of x after the straight.
+- Local corridor width is measured perpendicular to the centerline. It is
+  exposed by `Tunnel.halfWidthAt(x)` and is frozen within
+  `TUNNEL_MIN_HALF_WIDTH = 25` and `TUNNEL_MAX_HALF_WIDTH = 55` m (50-110 m
+  total). The first 120 m remains exactly 68 m wide.
+- `TUNNEL_SAMPLE_STEP = 8` is the maximum world-space wall chord length, not a
+  fixed x-step. T-0002 uses a smaller x-step on near-vertical sections so every
+  chord stays at or below 8 m; T-0001 still samples at fixed 8 m x intervals.
+- Wall geometry is offset normal to the local centerline by the local
+  half-width. T-0001 keeps the previous vertical-offset, constant-width
+  generator; T-0002 implements normal-offset, variable-width walls.
 - Wall segments are assigned to exactly one `FIELD_CHUNK_SIZE = 80` m chunk
   based on the segment midpoint. Adjacent chunks share endpoint coordinates so
   the tunnel is continuous.
 - The tunnel is endless in both directions. Negative x is valid.
 - The tunnel has no gates, free walls, rocks, or moving hazards.
-- There is no difficulty ramp; width and bend limits are constant.
+- There is no difficulty ramp; the width and bend limits are constant.
 - The ship starts at `START_POSITION = { x: 0, y: 60 }`, angle `0`, zero
   velocity.
 - The old infinite ground is removed. The tunnel floor and ceiling are the
@@ -413,6 +428,7 @@ interface CurvedWall {
 
 interface Tunnel {
   halfWidth: number;
+  halfWidthAt(x: number): number;
   centerAt(x: number): Vec2;
   headingAt(x: number): number;
 }
@@ -483,12 +499,15 @@ Required exports:
 - `RIGHT_MOUNT = { x: 16, y: -9 }`
 - `LINEAR_DRAG = 0.35`
 - `ANGULAR_DRAG = 0.25`
-- `TUNNEL_HALF_WIDTH = 34`
+- `TUNNEL_HALF_WIDTH = 34` (nominal half-width; not the local width)
+- `TUNNEL_MIN_HALF_WIDTH = 25`
+- `TUNNEL_MAX_HALF_WIDTH = 55`
 - `TUNNEL_CENTER_Y = 60`
 - `TUNNEL_START_STRAIGHT = 120`
-- `TUNNEL_BEND_AMPLITUDE = 24`
-- `TUNNEL_MAX_SLOPE = 0.35`
-- `TUNNEL_SAMPLE_STEP = 8`
+- `TUNNEL_BEND_AMPLITUDE = 150`
+- `TUNNEL_MAX_CLIMB_ANGLE = 85 degrees in radians`
+- `TUNNEL_MAX_SLOPE = Math.tan(TUNNEL_MAX_CLIMB_ANGLE)`
+- `TUNNEL_SAMPLE_STEP = 8` (maximum wall chord length)
 - `WALL_RADIUS = 2`
 - `DAMAGE_SPEED_THRESHOLD = 2`
 - `DAMAGE_SCALE = 4`
@@ -552,9 +571,14 @@ Observation semantics:
 - `nearestWallDistance` is the distance from the ship hull surface to the
   nearest tunnel wall within `WALL_SENSOR_RANGE`; it is `WALL_SENSOR_RANGE` when
   no wall is nearby and can be negative while the hull is penetrating a surface.
-- `tunnelCenterOffset` is `ship.y - tunnel.centerAt(ship.x).y`, positive above
-  the centerline.
-- `tunnelHalfWidth` is `tunnel.halfWidth`.
+- `tunnelCenterOffset` is the signed perpendicular offset from the local
+  centerline, positive along the local normal and consistent with
+  `lateralSpeed`. T-0001 currently reports the vertical offset
+  `ship.y - tunnel.centerAt(ship.x).y`; T-0002 implements the perpendicular
+  contract.
+- `tunnelHalfWidth` is the local perpendicular half-width,
+  `tunnel.halfWidthAt(ship.x)`. T-0001's `halfWidthAt` stub returns the nominal
+  34 m; T-0002 implements local width variation.
 - `tunnelHeading` is `tunnel.headingAt(ship.x)` in radians.
 - `forwardSpeed` is the velocity projected onto the tunnel tangent.
 - `lateralSpeed` is the velocity projected onto the tunnel normal.
