@@ -44,6 +44,13 @@ The simulation is fixed at 120 Hz with a seeded infinite field and exposes
 observations and a `Controller` interface for autonomous control experiments:
 [`docs/autonomy.md`](docs/autonomy.md).
 
+## Change workflow
+
+Non-trivial changes use the intake interview and templates described in
+[`AGENTS.md`](AGENTS.md). The brief template is
+[`docs/changes/TEMPLATE.md`](docs/changes/TEMPLATE.md); the questionnaire, test
+matrix, and contract freeze are under [`docs/templates`](docs/templates/).
+
 ## Local development
 
 Node 24 is required. On Windows in this environment, use the `.cmd` executables

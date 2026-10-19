@@ -69,6 +69,14 @@ wording, dependency updates without behavior changes, mechanical refactors,
 and fixes fully specified by an existing failing test. When in doubt, treat the
 change as non-trivial.
 
+Tier 2 and Tier 3 changes use the full brief, questionnaire, test matrix, and
+contract freeze. Tier 1 edits may skip the templates. The templates are:
+
+- `docs/changes/TEMPLATE.md` — change brief.
+- `docs/templates/intake-questionnaire.md` — decision tree and contradictions.
+- `docs/templates/test-matrix.md` — required test coverage.
+- `docs/templates/contract-freeze.md` — pre-test interface freeze.
+
 The lead owns this gate and must:
 
 1. Stop. Do not edit code, write tests, or spawn implementation agents.
@@ -80,16 +88,22 @@ The lead owns this gate and must:
    risks, options, and criteria but must not implement or write tests.
    Subagents cannot talk to the user directly; the lead relays questions and
    answers.
-4. Interview the user in focused rounds until every open question is resolved.
-   Offer concrete interpretations and tradeoffs rather than assumptions.
-5. Write `docs/changes/YYYY-MM-DD-<slug>.md` with the original request, goal,
-   current behavior, desired behavior, non-goals, acceptance criteria, edge
-   cases, affected interfaces, determinism/boundary impact, verification plan,
-   and open questions. Open questions must be empty before confirmation. This
-   brief is the only file change permitted before confirmation.
-6. Read the brief back, state the lead's understanding, and ask for an
+4. Interview the user using `docs/templates/intake-questionnaire.md`. Ask every
+   independent question in one round and use at most two rounds total. Offer
+   concrete interpretations and tradeoffs rather than assumptions. Record the
+   answers in the brief decision log.
+5. Write the brief from `docs/changes/TEMPLATE.md` at
+   `docs/changes/YYYY-MM-DD-<slug>.md`. Include the test matrix from
+   `docs/templates/test-matrix.md`. Open questions must be empty before
+   confirmation. This brief is the only file change permitted before
+   confirmation.
+6. Complete `docs/templates/contract-freeze.md` for Tier 2/3 changes: freeze the
+   public types, constants, and exports in `docs/spec.md`, create compiling
+   stubs with no behavior, and run typecheck. Red tests must fail for missing
+   behavior, not missing exports.
+7. Read the brief back, state the lead's understanding, and ask for an
    unambiguous go-ahead such as "confirmed" or "start development."
-7. Begin the test-driven development cycle only after that confirmation.
+8. Begin the test-driven development cycle only after that confirmation.
 
 If scope changes during implementation, stop and re-run the intake interview.
 If the user explicitly waives the interview for a specific change, record the
@@ -98,7 +112,8 @@ executable specification.
 
 ## Test-driven development
 
-Complete the change intake interview before starting this cycle.
+Complete the change intake interview and, for Tier 2/3 changes, the contract
+freeze before starting this cycle.
 
 Every feature follows this order:
 
