@@ -148,6 +148,60 @@ Fixed physics values for the initial lander:
 Use seeded pseudo-randomness for terrain. Do not use `Math.random` in the
 simulation package.
 
+## Terrain and landing API
+
+```ts
+interface Terrain {
+  seed: number;
+  points: readonly Vec2[];
+  pad: {
+    left: number;
+    right: number;
+    y: number;
+  };
+  heightAt(x: number): number;
+}
+```
+
+- The terrain spans `x = 0..600`. The pad is `x = 250..350` at `y = 0`.
+- Terrain from `x = 200..400` is a flat plateau at `y = 0`; seeded lunar hills
+  rise outside that range, kept within the drawable world.
+- The same seed produces identical terrain and `heightAt` values. Different
+  seeds should produce different terrain profiles.
+- `heightAt(x)` linearly interpolates between terrain points.
+
+Lander contact geometry in body coordinates:
+
+- left foot `{ x: -14, y: -16 }`
+- right foot `{ x: 14, y: -16 }`
+- nose `{ x: 0, y: 14 }`
+
+`SAFE_LANDING` is `{ verticalSpeed: 2.5, horizontalSpeed: 1.5,
+tilt: 12 degrees in radians }`. Speeds are absolute values.
+
+A touchdown requires both feet in contact and no nose contact. If only one foot
+or the nose contacts, the outcome is `crashed`. Contact on the pad is decided by
+both feet's world x coordinates being within `terrain.pad.left` and
+`terrain.pad.right`. The simulation freezes at a terminal outcome. The
+`thrusters` field reports only thrusters that actually produced thrust during
+the last step, so both are false when fuel is exhausted.
+
+## Game test hooks
+
+The playable page must expose these stable hooks for Playwright:
+
+- `data-testid="game-canvas"`
+- `data-testid="hud-altitude"`, `hud-vspeed`, `hud-hspeed`, `hud-tilt`, and
+  `hud-fuel`, each with a `data-value` attribute containing the raw numeric
+  value in meters, m/s, degrees, or fuel units respectively
+- `data-testid="thruster-left"` and `data-testid="thruster-right"` with
+  `data-active="true"` only while that thruster produces thrust
+- `data-testid="instructions"` mentioning Q, W, and R
+- `data-testid="outcome"` visible only after a terminal outcome
+
+The page remains fully playable with `Q`, `W`, and `R`. The HUD updates from
+the simulation state, never from render-only mutable state.
+
 ## Testing strategy
 
 - Vitest unit tests run in Node for the simulation and pure game helpers.
