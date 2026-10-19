@@ -71,14 +71,33 @@ test("R starts a new seeded run and restores hull, score, and progress", async (
   await expect.poll(() => readNumericDataValue(progress)).toBeGreaterThan(0);
   await expect.poll(() => readNumericDataValue(score)).toBeGreaterThan(0);
 
-  await page.keyboard.press("r");
+  const resetValues = await page.evaluate(() => {
+    const readDataValue = (testId: string): string | null =>
+      document
+        .querySelector<HTMLElement>(`[data-testid="${testId}"]`)
+        ?.getAttribute("data-value") ?? null;
 
-  await expect
-    .poll(() => seedDisplay.innerText())
-    .not.toBe(initialSeed);
-  await expect.poll(() => readNumericDataValue(hull)).toBe(100);
-  await expect.poll(() => readNumericDataValue(score)).toBe(0);
-  await expect.poll(() => readNumericDataValue(progress)).toBe(0);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "r" }));
+
+    return {
+      seed:
+        document
+          .querySelector<HTMLElement>('[data-testid="seed-display"]')
+          ?.textContent?.trim() ?? null,
+      hull: readDataValue("hud-hull"),
+      score: readDataValue("hud-score"),
+      progress: readDataValue("hud-progress"),
+    };
+  });
+
+  expect(resetValues.seed).not.toBeNull();
+  expect(resetValues.seed).not.toBe(initialSeed);
+  expect(resetValues.hull).not.toBeNull();
+  expect(Number(resetValues.hull)).toBe(100);
+  expect(resetValues.score).not.toBeNull();
+  expect(Number(resetValues.score)).toBe(0);
+  expect(resetValues.progress).not.toBeNull();
+  expect(Number(resetValues.progress)).toBe(0);
 
   const outcome = page.getByTestId("outcome");
   await expect(outcome).toBeAttached();
