@@ -7,6 +7,7 @@ import {
 import { getCanvas } from "../dom";
 import { drawBackdrop } from "./backdrop";
 import { drawField } from "./field";
+import { drawRadar } from "./radar";
 import { drawStarship } from "./ship";
 
 const VIEW_TARGET_WIDTH = 300;
@@ -71,6 +72,7 @@ export function createRenderer(): Renderer {
 
       drawBackdrop(ctx, viewport);
       drawField(ctx, viewport, camera, field, state);
+      drawRadar(ctx, viewport, camera, state);
       drawStarship(ctx, viewport, camera, state);
     },
   };

@@ -24,10 +24,12 @@ const controller: Controller = {
   act(observation) {
     const belowCenter = observation.tunnelCenterOffset < -2;
     const aboveCenter = observation.tunnelCenterOffset > 2;
+    const forwardClearance = observation.sensor.distances[0];
 
     return {
-      left: belowCenter || observation.forwardSpeed < 6,
-      right: aboveCenter || observation.hull < 50,
+      left:
+        belowCenter || forwardClearance < 20 || observation.forwardSpeed < 6,
+      right: aboveCenter || forwardClearance < 20 || observation.hull < 50,
     };
   },
 };
@@ -64,9 +66,30 @@ tunnel.
 | `tunnelHeading` | Centerline tangent angle in radians |
 | `forwardSpeed` | Velocity projected onto the tunnel tangent |
 | `lateralSpeed` | Velocity projected onto the tunnel normal |
+| `sensorRadius` | Configured radar view radius in meters |
+| `sensor` | Last 360-ray ship-relative radar reading |
 
 All values are finite. The Starship collision capsule has radius 9 m and
 half-length 15 m. The tunnel is 68 m wide and has no ground plane or gates.
+
+### Ship sensor
+
+The sensor is mounted at the ship center and produces a `SensorReading`:
+
+- `radius` — view radius used for that scan.
+- `tick` — simulation tick at which the scan was produced.
+- `origin` — ship center at the scan.
+- `heading` — ship angle at the scan.
+- `distances` — exactly 360 values. Index `i` is the ship-relative angle
+  `i` degrees, where `0°` is the nose and angles increase counter-clockwise.
+  Each value is the distance to the nearest tunnel wall surface, or `radius`
+  when no wall was hit within range.
+
+Scans occur at tick 0 and every second (120 ticks). The configured view radius
+is `sensorRadius`, default 120 m, bounded to `20..200 m`. `setSensorRadius`
+updates the configured value; the next scheduled scan uses it, while the
+previous reading remains available until then. The configured radius persists
+across reset/seed changes.
 
 ## Model lifecycle
 
@@ -74,7 +97,9 @@ half-length 15 m. The tunnel is 68 m wide and has no ground plane or gates.
 - The default seed is `1`; seeds are unsigned 32-bit integers.
 - `reset(seed?)` restores the configured start and hull. Without a pinned
   field, it regenerates the tunnel when a seed is provided and reuses the
-  current seed otherwise.
+  current seed otherwise. The configured sensor radius persists.
+- `setSensorRadius(radius)` clamps the configured radar view radius. The next
+  scheduled scan uses it; the previous reading remains until then.
 - `SimulationOptions.field` pins a field for the simulation lifetime. It is
   useful for deterministic tests and custom tunnels; `reset` keeps it.
 - `simulation.field` exposes deterministic chunks, the tunnel centerline, and
@@ -104,8 +129,10 @@ npm.cmd run sim:demo
 ```
 
 This runs a deterministic, non-trained controller in Node. It prints finite
-telemetry every five seconds and the final outcome, seed, progress, and score.
-It is a baseline for the controller interface, not a training implementation.
+telemetry every five seconds, including the radar scan tick, configured and
+last-scan radius, minimum sensor distance, and forward-ray distance. It prints
+the final outcome, seed, progress, and score. It is a baseline for the
+controller interface, not a training implementation.
 
 ## Training loop shape
 
@@ -125,5 +152,5 @@ while (state.outcome === "flying") {
 ```
 
 Rewards and termination can be derived from progress, forward speed, centerline
-offset, hull remaining, impact damage, and the final score. No renderer or
-browser is required.
+offset, hull remaining, impact damage, radar clearances, and the final score.
+No renderer or browser is required.

@@ -108,7 +108,7 @@ h1 {
   overflow: hidden;
 }
 
-canvas {
+#game-canvas {
   position: absolute;
   inset: 0;
   display: block;
@@ -357,6 +357,92 @@ kbd {
   text-align: center;
 }
 
+.sensor-panel {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 15;
+  display: grid;
+  gap: 0.42rem;
+  width: min(19rem, calc(100% - 1.5rem));
+  padding: 0.5rem 0.58rem 0.58rem;
+  background:
+    linear-gradient(180deg, rgba(9, 18, 28, 0.94), rgba(6, 12, 22, 0.94));
+  border: 1px solid rgba(76, 180, 190, 0.42);
+  border-radius: 0.5rem;
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.42),
+    inset 0 0 24px rgba(45, 160, 180, 0.04);
+  pointer-events: auto;
+  backdrop-filter: blur(4px);
+}
+
+.sensor-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+}
+
+.sensor-panel-title {
+  color: var(--accent-strong);
+}
+
+.sensor-scan {
+  color: var(--muted-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sensor-scan output {
+  margin-left: 0.22rem;
+  color: var(--accent);
+}
+
+.sensor-chart {
+  display: block;
+  width: 100%;
+  height: 7.8rem;
+  background: #071018;
+  border: 1px solid rgba(60, 74, 101, 0.85);
+  border-radius: 0.3rem;
+}
+
+.sensor-radius-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+}
+
+.sensor-radius-value {
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.sensor-radius {
+  width: 100%;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--accent-strong);
+  cursor: pointer;
+}
+
+.sensor-radius:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .outcome {
   position: absolute;
   inset: 0;
@@ -436,6 +522,13 @@ kbd {
   border: 0;
 }
 
+@media (max-width: 1120px) {
+  .instructions {
+    left: 0.75rem;
+    transform: none;
+  }
+}
+
 @media (max-width: 760px) {
   .game-hud {
     flex-direction: column;
@@ -451,8 +544,23 @@ kbd {
     width: min(15rem, 100%);
   }
 
+  .sensor-panel {
+    right: 0.55rem;
+    bottom: 0.55rem;
+    width: min(16rem, calc(100% - 1.1rem));
+  }
+
   .instructions-hint {
     display: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .instructions {
+    right: auto;
+    bottom: 13.6rem;
+    left: 50%;
+    transform: translateX(-50%);
   }
 }
 
@@ -500,10 +608,13 @@ kbd {
   }
 
   .instructions {
-    bottom: 0.55rem;
     gap: 0.35rem 0.7rem;
     padding: 0.36rem 0.6rem;
     font-size: 0.7rem;
+  }
+
+  .sensor-panel {
+    width: calc(100% - 1.1rem);
   }
 
   .outcome-card {

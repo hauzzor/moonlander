@@ -5,6 +5,7 @@ import { createInput } from "./input";
 import { createRenderer } from "./render";
 import { DEFAULT_SEED, nextSeed, parseSeed } from "./seed";
 import { createSeedControls } from "./seed-controls";
+import { createSensorPanel } from "./sensor-panel";
 
 const MAX_FRAME_SECONDS = 0.25;
 
@@ -17,6 +18,12 @@ export function startGame(): void {
   const camera = createCamera();
   const hud = createHud();
   const renderer = createRenderer();
+  const sensorPanel = createSensorPanel({
+    getSensorRadius: () => sim.getState().sensorRadius,
+    setSensorRadius: (radius) => {
+      sim.setSensorRadius(radius);
+    },
+  });
   let accumulator = 0;
   let lastTime = performance.now();
   let animationId: number | null = null;
@@ -36,6 +43,7 @@ export function startGame(): void {
 
     snapCamera(camera, state);
     hud.update(state);
+    sensorPanel.update(state);
     renderState(state);
     lastTime = performance.now();
   }
@@ -76,6 +84,7 @@ export function startGame(): void {
     const state = sim.getState();
     updateCamera(camera, state, frameTime);
     hud.update(state);
+    sensorPanel.update(state);
     renderState(state);
 
     animationId = requestAnimationFrame(frame);
@@ -83,6 +92,7 @@ export function startGame(): void {
 
   window.addEventListener("resize", () => {
     renderer.resize();
+    sensorPanel.resize();
     renderState(sim.getState());
   });
 
@@ -92,6 +102,7 @@ export function startGame(): void {
   seedControls.applySeed(currentSeed);
   snapCamera(camera, initialState);
   hud.update(initialState);
+  sensorPanel.update(initialState);
   renderState(initialState);
   lastTime = performance.now();
   animationId = requestAnimationFrame(frame);

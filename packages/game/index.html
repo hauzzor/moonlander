@@ -104,6 +104,43 @@
           <span class="instructions-hint">Stay inside the tunnel. Keep the hull intact.</span>
         </div>
 
+        <aside
+          class="sensor-panel"
+          data-testid="sensor-panel"
+          aria-label="Ship sensor array"
+        >
+          <div class="sensor-panel-header">
+            <span class="sensor-panel-title">SENSOR ARRAY</span>
+            <span class="sensor-scan">
+              SCAN TICK <output data-testid="sensor-scan-tick">0</output>
+            </span>
+          </div>
+          <canvas
+            class="sensor-chart"
+            data-testid="sensor-chart"
+            aria-label="Distance versus angle sensor chart"
+          ></canvas>
+          <div class="sensor-radius-header">
+            <label class="sensor-radius-label" for="sensor-radius">
+              VIEW RADIUS
+            </label>
+            <output class="sensor-radius-value" data-testid="sensor-radius-value">
+              -- m
+            </output>
+          </div>
+          <input
+            class="sensor-radius"
+            id="sensor-radius"
+            data-testid="sensor-radius"
+            type="range"
+            min="20"
+            max="200"
+            step="5"
+            value="120"
+            aria-label="Sensor view radius in meters"
+          />
+        </aside>
+
         <div
           class="outcome hidden"
           data-testid="outcome"

@@ -58,6 +58,8 @@ const demoController: Controller = {
 };
 
 function printTelemetry(tick: number, observation: Observation): void {
+  const sensorMinimum = Math.min(...observation.sensor.distances);
+  const sensorForward = observation.sensor.distances[0]!;
   const values = [
     observation.x,
     observation.y,
@@ -74,6 +76,14 @@ function printTelemetry(tick: number, observation: Observation): void {
     observation.tunnelHeading,
     observation.forwardSpeed,
     observation.lateralSpeed,
+    observation.sensorRadius,
+    observation.sensor.radius,
+    observation.sensor.tick,
+    observation.sensor.origin.x,
+    observation.sensor.origin.y,
+    observation.sensor.heading,
+    sensorMinimum,
+    sensorForward,
   ];
   if (!values.every(Number.isFinite)) {
     throw new Error("Non-finite telemetry");
@@ -91,7 +101,11 @@ function printTelemetry(tick: number, observation: Observation): void {
       `wall=${observation.nearestWallDistance.toFixed(1).padStart(7)}m ` +
       `offset=${observation.tunnelCenterOffset.toFixed(1).padStart(6)}m ` +
       `fwd=${observation.forwardSpeed.toFixed(2).padStart(6)}m/s ` +
-      `lat=${observation.lateralSpeed.toFixed(2).padStart(6)}m/s`,
+      `lat=${observation.lateralSpeed.toFixed(2).padStart(6)}m/s ` +
+      `sensor=${observation.sensorRadius.toFixed(0).padStart(3)}m ` +
+      `scan=${observation.sensor.tick.toFixed(0).padStart(4)} ` +
+      `sensorMin=${sensorMinimum.toFixed(1).padStart(6)}m ` +
+      `sensorFwd=${sensorForward.toFixed(1).padStart(6)}m`,
   );
 }
 

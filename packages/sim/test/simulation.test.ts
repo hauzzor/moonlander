@@ -13,7 +13,10 @@ const leftThruster: Action = { left: true, right: false };
 const rightThruster: Action = { left: false, right: true };
 
 function damageFreeSimulation(start?: ShipStart) {
-  return createSimulationWithField(createWideTunnelField(), { start });
+  return createSimulationWithField(
+    createWideTunnelField(),
+    start === undefined ? {} : { start },
+  );
 }
 
 describe("fixed-step tunnel simulation", () => {
@@ -55,6 +58,20 @@ describe("fixed-step tunnel simulation", () => {
   it("starts at the exact default state without gatesPassed or fuel", () => {
     const state = sim.createSimulation().getState();
 
+    expect(Object.keys(state).sort()).toEqual([
+      "hull",
+      "invulnerable",
+      "outcome",
+      "progress",
+      "score",
+      "seed",
+      "sensor",
+      "sensorRadius",
+      "ship",
+      "thrusters",
+      "tick",
+      "time",
+    ]);
     expect(state).toEqual({
       tick: 0,
       time: 0,
@@ -71,7 +88,16 @@ describe("fixed-step tunnel simulation", () => {
       outcome: "flying",
       score: 0,
       progress: 0,
+      sensorRadius: sim.SENSOR_VIEW_DEFAULT,
+      sensor: expect.objectContaining({
+        radius: sim.SENSOR_VIEW_DEFAULT,
+        tick: 0,
+        origin: { x: 0, y: 60 },
+        heading: 0,
+        distances: expect.any(Array),
+      }),
     });
+    expect(state.sensor.distances).toHaveLength(sim.SENSOR_RAY_COUNT);
     expect("gatesPassed" in state).toBe(false);
     expect("fuel" in state).toBe(false);
   });

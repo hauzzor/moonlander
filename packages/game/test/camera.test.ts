@@ -24,6 +24,14 @@ function makeState(
     outcome: "flying",
     score: 0,
     progress: 0,
+    sensorRadius: 120,
+    sensor: {
+      radius: 120,
+      tick: 0,
+      origin: position,
+      heading: 0,
+      distances: Array.from({ length: 360 }, () => 120),
+    },
   };
 }
 

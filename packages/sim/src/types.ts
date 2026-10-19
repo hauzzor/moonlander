@@ -17,6 +17,14 @@ export interface ShipState {
   angularVelocity: number;
 }
 
+export interface SensorReading {
+  radius: number;
+  tick: number;
+  origin: Vec2;
+  heading: number;
+  distances: readonly number[];
+}
+
 export interface SimState {
   tick: number;
   time: number;
@@ -28,6 +36,8 @@ export interface SimState {
   outcome: RunOutcome;
   score: number;
   progress: number;
+  sensorRadius: number;
+  sensor: SensorReading;
 }
 
 export interface ShipStart {
@@ -64,8 +74,9 @@ export interface Field {
 export interface SimulationOptions {
   seed?: number;
   hull?: number;
-  start?: ShipStart | undefined;
+  start?: ShipStart;
   field?: Field;
+  sensorRadius?: number;
 }
 
 export interface Observation {
@@ -84,6 +95,8 @@ export interface Observation {
   tunnelHeading: number;
   forwardSpeed: number;
   lateralSpeed: number;
+  sensorRadius: number;
+  sensor: SensorReading;
 }
 
 export interface Controller {
@@ -96,5 +109,6 @@ export interface Simulation {
   getObservation(): Observation;
   step(action: Action): SimState;
   reset(seed?: number): SimState;
+  setSensorRadius(radius: number): void;
   readonly field: Field;
 }

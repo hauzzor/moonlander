@@ -13,6 +13,7 @@ Play: https://hauzzor.github.io/moonlander/
 - `W` — fire the right thruster (upward and leftward force, counter-clockwise torque)
 - `R` — start a new run with a new seed
 - Seed field — enter an unsigned 32-bit seed and load it to replay a tunnel
+- View radius slider — adjust the 360° radar range from 20 to 200 m
 
 Both thrusters together produce balanced vertical lift. There is no fuel.
 
@@ -29,6 +30,10 @@ Both thrusters together produce balanced vertical lift. There is no fuel.
 - Score is `floor(progress)`.
 - There are no gates or free obstacles; the tunnel floor and ceiling are the
   only collision surfaces.
+- A ship-relative 360° radar scans once per second and shows the distance to
+  the tunnel wall in every direction. The radar view radius defaults to 120 m
+  and is adjustable from 20 to 200 m. The bottom-right chart shows distance on
+  the Y axis and angle on the X axis.
 
 The tunnel is 68 m wide, enclosed, and endless in both directions. The first
 120 m is straight, then the seeded centerline bends gently rightward. The same

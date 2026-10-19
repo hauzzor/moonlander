@@ -117,6 +117,36 @@ Seed behavior:
 - The HUD shows hull, speed, progress, score, and thruster state. Fuel is not
   displayed.
 
+## Ship sensors
+
+- One sensor is mounted at the ship center.
+- The sensor casts `360` rays, one per degree. Angles are ship-relative:
+  `0°` points along the ship's nose, and angles increase counter-clockwise.
+- Each ray returns the distance from the ship center to the nearest tunnel wall
+  surface within the view radius. If no wall is hit, the distance is the view
+  radius.
+- `SensorReading.distances[i]` corresponds to angle `i` degrees. The array has
+  exactly `360` finite, non-negative values no greater than the scan radius.
+- A reading stores `radius`, `tick`, `origin`, `heading`, and `distances`.
+- Scans occur at tick `0` and every `SENSOR_INTERVAL_SECONDS` (`120` ticks).
+  The initial reading is available at load.
+- The configured view radius is `sensorRadius`, default `120 m`, clamped to
+  `SENSOR_VIEW_MIN = 20` and `SENSOR_VIEW_MAX = 200`. Non-finite radius values
+  fall back to the default.
+- `setSensorRadius(radius)` clamps the value and updates the configured radius.
+  It does not rescan immediately; the next scheduled scan uses the new radius.
+  The previous reading remains visible until then.
+- The configured radius persists across `reset`/seed changes. Reset performs a
+  new initial scan at tick `0` with the configured radius.
+- The sensor detects the tunnel floor and ceiling only. There are no gates,
+  free obstacles, or self-hits.
+- The UI has a radar overlay around the current ship showing the last scan,
+  with range rings and a 1 Hz sweep, plus a bottom-right panel with a filled
+  distance-vs-angle chart and a radius slider (`20..200 m`, default `120`).
+- The radar overlay is centered on the current ship and rotated with the
+  current ship angle. The chart shows the raw ship-relative reading. Both use
+  the last scan radius/data until the next scan.
+
 ## Collision, damage, and outcomes
 
 - The ship collides with the tunnel floor and ceiling using its capsule shape.
@@ -173,6 +203,13 @@ The playable page must expose these stable hooks for Playwright:
 - `data-testid="seed-display"` showing the current seed
 - `data-testid="seed-input"` accepting an unsigned seed and
   `data-testid="seed-load"` loading it
+- `data-testid="sensor-panel"` containing the sensor controls and chart
+- `data-testid="sensor-chart"` with `data-scan-tick` and `data-scan-radius`
+  attributes reflecting the last scan
+- `data-testid="sensor-radius"` range input with min `20`, max `200`, step `5`,
+  default `120`
+- `data-testid="sensor-radius-value"` showing the configured radius
+- `data-testid="sensor-scan-tick"` showing the last scan tick/time
 
 The page remains fully playable with `Q`, `W`, and `R`. The HUD updates from
 the simulation state, never from render-only mutable state.
@@ -204,6 +241,14 @@ interface ShipState {
   angularVelocity: number;
 }
 
+interface SensorReading {
+  radius: number;
+  tick: number;
+  origin: Vec2;
+  heading: number;
+  distances: readonly number[];
+}
+
 interface SimState {
   tick: number;
   time: number;
@@ -215,6 +260,8 @@ interface SimState {
   outcome: RunOutcome;
   score: number;
   progress: number;
+  sensorRadius: number;
+  sensor: SensorReading;
 }
 
 interface ShipStart {
@@ -229,6 +276,7 @@ interface SimulationOptions {
   hull?: number;
   start?: ShipStart;
   field?: Field;
+  sensorRadius?: number;
 }
 
 interface CurvedWall {
@@ -271,6 +319,8 @@ interface Observation {
   tunnelHeading: number;
   forwardSpeed: number;
   lateralSpeed: number;
+  sensorRadius: number;
+  sensor: SensorReading;
 }
 
 interface Controller {
@@ -283,6 +333,7 @@ interface Simulation {
   getObservation(): Observation;
   step(action: Action): SimState;
   reset(seed?: number): SimState;
+  setSensorRadius(radius: number): void;
   readonly field: Field;
 }
 ```
@@ -317,6 +368,11 @@ Required exports:
 - `INVULNERABILITY_SECONDS = 0.75`
 - `BOUNCE_RESTITUTION = 0.35`
 - `SENSOR_RANGE = 200`
+- `SENSOR_RAY_COUNT = 360`
+- `SENSOR_INTERVAL_SECONDS = 1`
+- `SENSOR_VIEW_MIN = 20`
+- `SENSOR_VIEW_MAX = 200`
+- `SENSOR_VIEW_DEFAULT = 120`
 - `START_POSITION = { x: 0, y: 60 }`
 - `DEFAULT_SEED = 1`
 - `createField(seed)` creates a deterministic tunnel field.
@@ -336,6 +392,16 @@ Simulation semantics:
   If `seed` is provided, it becomes the new seed; otherwise the current seed is
   reused.
 - `simulation.field` exposes the seeded tunnel for rendering and analysis.
+- The default configured sensor radius is `SENSOR_VIEW_DEFAULT = 120`. A sensor
+  scan is produced at tick `0` and every `120` ticks. The reading's `tick` is
+  the tick at which it was produced.
+- `simulation.setSensorRadius(radius)` clamps to `SENSOR_VIEW_MIN..SENSOR_VIEW_MAX`
+  and updates the configured radius. It does not rescan immediately; the next
+  scheduled scan uses the new radius.
+- `simulation.reset(seed?)` keeps the configured sensor radius and produces a
+  fresh scan at tick `0` with that radius.
+- `simulation.getState()` and `getObservation()` expose both the configured
+  `sensorRadius` and the last `sensor` reading.
 - If `SimulationOptions.field` is provided, the simulation uses that field for
   its lifetime and sets its seed from `field.seed`. `reset(seed?)` keeps the
   pinned field and ignores `seed`. This seam exists for deterministic tests and
@@ -358,13 +424,20 @@ Observation semantics:
 - `tunnelHeading` is `tunnel.headingAt(ship.x)` in radians.
 - `forwardSpeed` is the velocity projected onto the tunnel tangent.
 - `lateralSpeed` is the velocity projected onto the tunnel normal.
+- `sensorRadius` is the configured view radius. It may differ from
+  `sensor.radius` until the next scheduled scan.
+- `sensor` is the last 360-ray reading. `sensor.distances[i]` is the
+  ship-relative angle `i` (0° = nose, counter-clockwise) distance to the
+  nearest tunnel wall surface, or `sensor.radius` when no wall was hit.
 - All observation fields are finite numbers.
 
 ## Testing strategy
 
-- Vitest unit tests run in Node for the simulation and pure game helpers.
+- Vitest unit tests run in Node for the simulation, sensor ray casting and
+  cadence, and pure game helpers.
 - Playwright verifies the real page, Canvas presence, keyboard thrusters, HUD,
-  seed controls, input-driven progress, restart, and the hidden outcome overlay.
+  seed controls, sensor panel/chart/slider, input-driven progress, restart, and
+  the hidden outcome overlay.
 - CI runs typecheck, unit tests, browser tests, and production build.
 - A live Playwright smoke test runs against the deployed GitHub Pages URL.
 

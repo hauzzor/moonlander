@@ -25,16 +25,28 @@ const observationKeys = [
   "tunnelHeading",
   "forwardSpeed",
   "lateralSpeed",
+  "sensorRadius",
+  "sensor",
 ].sort();
 
 function expectFiniteObservation(observation: Observation): void {
-  expect(Object.values(observation).every(Number.isFinite)).toBe(true);
+  const { sensor, ...numericFields } = observation;
+  expect(observation.sensorRadius).toBeDefined();
+  expect(sensor).toBeDefined();
+  expect(Object.values(numericFields).every(Number.isFinite)).toBe(true);
+  expect(Number.isFinite(sensor.radius)).toBe(true);
+  expect(Number.isFinite(sensor.tick)).toBe(true);
+  expect(Number.isFinite(sensor.heading)).toBe(true);
+  expect(Number.isFinite(sensor.origin.x)).toBe(true);
+  expect(Number.isFinite(sensor.origin.y)).toBe(true);
+  expect(sensor.distances).toHaveLength(sim.SENSOR_RAY_COUNT);
+  expect(sensor.distances.every(Number.isFinite)).toBe(true);
 }
 
 describe("tunnel-aware autonomy observation API", () => {
   it("returns exactly the new finite fields and no gate, fuel, altitude, or pad fields", () => {
-    const observation = createSimulationWithField(createControlledField({ seed: 41 }))
-      .getObservation();
+    const simulation = createSimulationWithField(createControlledField({ seed: 41 }));
+    const observation = simulation.getObservation();
 
     expect(Object.keys(observation).sort()).toEqual(observationKeys);
     expect(observation).toEqual({
@@ -53,6 +65,8 @@ describe("tunnel-aware autonomy observation API", () => {
       tunnelHeading: 0,
       forwardSpeed: 0,
       lateralSpeed: 0,
+      sensorRadius: sim.SENSOR_VIEW_DEFAULT,
+      sensor: simulation.getState().sensor,
     });
     expectFiniteObservation(observation);
     for (const removedField of [

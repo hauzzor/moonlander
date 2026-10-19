@@ -8,6 +8,8 @@ import {
   INITIAL_HULL,
   INVULNERABILITY_SECONDS,
   LINEAR_DRAG,
+  SENSOR_INTERVAL_SECONDS,
+  SENSOR_VIEW_DEFAULT,
   SHIP_INERTIA,
   SHIP_MASS,
   START_POSITION,
@@ -19,11 +21,13 @@ import {
 import { createField } from "./field";
 import { clamp } from "./geometry";
 import { thrusterEffect } from "./physics";
+import { clampSensorRadius, scanSensor } from "./sensor";
 import type {
   Action,
   Field,
   Observation,
   RunOutcome,
+  SensorReading,
   ShipState,
   ShipStart,
   SimState,
@@ -33,6 +37,7 @@ import type {
 } from "./types";
 
 const INVULNERABILITY_TICKS = Math.round(INVULNERABILITY_SECONDS / FIXED_DT);
+const SENSOR_INTERVAL_TICKS = Math.round(SENSOR_INTERVAL_SECONDS / FIXED_DT);
 
 interface Current {
   tick: number;
@@ -42,6 +47,8 @@ interface Current {
   thrusters: Action;
   outcome: RunOutcome;
   progress: number;
+  sensorRadius: number;
+  sensor: SensorReading;
 }
 
 function copyVec(vector: Vec2): Vec2 {
@@ -57,7 +64,12 @@ function initialBody(start: ShipStart | undefined): ShipState {
   };
 }
 
-function initialCurrent(body: ShipState, hull: number): Current {
+function initialCurrent(
+  body: ShipState,
+  hull: number,
+  sensorRadius: number,
+  field: Field,
+): Current {
   return {
     tick: 0,
     body: {
@@ -71,6 +83,14 @@ function initialCurrent(body: ShipState, hull: number): Current {
     thrusters: { left: false, right: false },
     outcome: hull <= 0 ? "destroyed" : "flying",
     progress: 0,
+    sensorRadius,
+    sensor: scanSensor(
+      field,
+      body.position,
+      body.angle,
+      sensorRadius,
+      0,
+    ),
   };
 }
 
@@ -98,6 +118,8 @@ function toSimState(current: Current, seed: number): SimState {
     outcome: current.outcome,
     score: scoreFor(current.progress),
     progress: current.progress,
+    sensorRadius: current.sensorRadius,
+    sensor: current.sensor,
   };
 }
 
@@ -109,7 +131,15 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
   const bodyTemplate = initialBody(options.start);
   const hullTemplate = options.hull ?? INITIAL_HULL;
   const spawnX = bodyTemplate.position.x;
-  let current = initialCurrent(bodyTemplate, hullTemplate);
+  let configuredSensorRadius = clampSensorRadius(
+    options.sensorRadius ?? SENSOR_VIEW_DEFAULT,
+  );
+  let current = initialCurrent(
+    bodyTemplate,
+    hullTemplate,
+    configuredSensorRadius,
+    activeField,
+  );
 
   const getState = (): SimState => toSimState(current, activeField.seed);
 
@@ -140,6 +170,8 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       tunnelHeading: heading,
       forwardSpeed: velocity.x * tangent.x + velocity.y * tangent.y,
       lateralSpeed: velocity.x * normal.x + velocity.y * normal.y,
+      sensorRadius: current.sensorRadius,
+      sensor: current.sensor,
     };
   };
 
@@ -205,9 +237,21 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         current.progress,
         Math.max(0, advanced.position.x - spawnX),
       );
+      const tick = current.tick + 1;
+      const outcome = hull <= 0 ? "destroyed" : "flying";
+      const sensor =
+        outcome === "flying" && tick % SENSOR_INTERVAL_TICKS === 0
+          ? scanSensor(
+              activeField,
+              advanced.position,
+              advanced.angle,
+              current.sensorRadius,
+              tick,
+            )
+          : current.sensor;
 
       current = {
-        tick: current.tick + 1,
+        tick,
         body: {
           position: advanced.position,
           velocity: advanced.velocity,
@@ -217,17 +261,31 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         hull,
         invulnerableTicksRemaining,
         thrusters: { left: action.left, right: action.right },
-        outcome: hull <= 0 ? "destroyed" : "flying",
+        outcome,
         progress,
+        sensorRadius: current.sensorRadius,
+        sensor,
       };
 
       return getState();
+    },
+    setSensorRadius: (radius: number): void => {
+      configuredSensorRadius = clampSensorRadius(radius);
+      current = {
+        ...current,
+        sensorRadius: configuredSensorRadius,
+      };
     },
     reset: (seed?: number): SimState => {
       if (!pinnedField && seed !== undefined) {
         activeField = createField(seed);
       }
-      current = initialCurrent(bodyTemplate, hullTemplate);
+      current = initialCurrent(
+        bodyTemplate,
+        hullTemplate,
+        configuredSensorRadius,
+        activeField,
+      );
       return getState();
     },
   };

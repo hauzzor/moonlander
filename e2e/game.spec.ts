@@ -10,6 +10,40 @@ async function readNumericDataValue(locator: Locator): Promise<number> {
   return value;
 }
 
+async function hasNonBackgroundPixels(canvas: Locator): Promise<boolean> {
+  return canvas.evaluate((element) => {
+    if (!(element instanceof HTMLCanvasElement)) {
+      return false;
+    }
+
+    const context = element.getContext("2d");
+    if (context === null || element.width === 0 || element.height === 0) {
+      return false;
+    }
+
+    const background = getComputedStyle(element).backgroundColor.match(
+      /^rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/,
+    );
+    if (background === null) {
+      return false;
+    }
+
+    const [red, green, blue] = background.slice(1).map(Number);
+    const pixels = context.getImageData(0, 0, element.width, element.height).data;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (
+        pixels[index + 3]! > 0 &&
+        (pixels[index]! !== red || pixels[index + 1]! !== green || pixels[index + 2]! !== blue)
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+}
+
 test("Starship HUD exposes finite telemetry and removes landing HUD hooks", async ({ page }) => {
   await page.goto("./");
 
@@ -129,6 +163,70 @@ test("on-screen instructions mention Q, W, R, and the tunnel but not gates", asy
   await expect(instructions).not.toContainText(/gates/i);
 });
 
+test("sensor panel and chart canvas are visible with rendered data", async ({ page }) => {
+  await page.goto("./");
+
+  await expect(page.getByTestId("sensor-panel")).toBeVisible();
+
+  const chart = page.getByTestId("sensor-chart");
+  await expect(chart).toBeVisible();
+  expect(await hasNonBackgroundPixels(chart)).toBe(true);
+});
+
+test("sensor radius slider has the configured range and updates its readout", async ({ page }) => {
+  await page.goto("./");
+
+  await expect(page.getByTestId("sensor-panel")).toBeVisible();
+
+  const slider = page.getByTestId("sensor-radius");
+  const radiusValue = page.getByTestId("sensor-radius-value");
+  await expect(slider).toHaveAttribute("min", "20");
+  await expect(slider).toHaveAttribute("max", "200");
+  await expect(slider).toHaveAttribute("step", "5");
+  await expect(slider).toHaveValue("120");
+  await expect(radiusValue).toBeVisible();
+  await expect(radiusValue).toContainText("120");
+
+  await slider.focus();
+  for (let step = 0; step < 8; step++) {
+    await slider.press("ArrowLeft");
+  }
+
+  await expect(slider).toHaveValue("80");
+  await expect(radiusValue).toContainText("80");
+});
+
+test("sensor chart reflects the updated radius at the next scan", async ({ page }) => {
+  await page.goto("./");
+
+  await expect(page.getByTestId("sensor-panel")).toBeVisible();
+
+  const chart = page.getByTestId("sensor-chart");
+  const initialScanTickValue = await chart.getAttribute("data-scan-tick");
+  expect(initialScanTickValue).not.toBeNull();
+  const initialScanTick = Number(initialScanTickValue);
+  expect(Number.isFinite(initialScanTick)).toBe(true);
+  await expect(chart).toHaveAttribute("data-scan-radius", "120");
+
+  const slider = page.getByTestId("sensor-radius");
+  await slider.focus();
+  for (let step = 0; step < 8; step++) {
+    await slider.press("ArrowLeft");
+  }
+  await expect(page.getByTestId("sensor-radius-value")).toContainText("80");
+
+  await expect
+    .poll(
+      async () => {
+        const scanTick = Number(await chart.getAttribute("data-scan-tick"));
+        const scanRadius = await chart.getAttribute("data-scan-radius");
+        return scanTick > initialScanTick && scanRadius === "80";
+      },
+      { timeout: 4_000 },
+    )
+    .toBe(true);
+});
+
 test("progress increases while holding Q", async ({ page }) => {
   await page.goto("./");
 
@@ -150,37 +248,7 @@ test("game canvas contains rendered pixels that differ from its background", asy
 
   const canvas = page.getByTestId("game-canvas");
   await expect(canvas).toBeVisible();
-
-  const hasNonBackgroundPixels = await canvas.evaluate((element) => {
-    const gameCanvas = element as HTMLCanvasElement;
-    const context = gameCanvas.getContext("2d");
-    if (context === null || gameCanvas.width === 0 || gameCanvas.height === 0) {
-      return false;
-    }
-
-    const background = getComputedStyle(gameCanvas).backgroundColor.match(
-      /^rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/,
-    );
-    if (background === null) {
-      return false;
-    }
-
-    const [red, green, blue] = background.slice(1).map(Number);
-    const pixels = context.getImageData(0, 0, gameCanvas.width, gameCanvas.height).data;
-
-    for (let index = 0; index < pixels.length; index += 4) {
-      if (
-        pixels[index + 3]! > 0 &&
-        (pixels[index]! !== red || pixels[index + 1]! !== green || pixels[index + 2]! !== blue)
-      ) {
-        return true;
-      }
-    }
-
-    return false;
-  });
-
-  expect(hasNonBackgroundPixels).toBe(true);
+  expect(await hasNonBackgroundPixels(canvas)).toBe(true);
 });
 
 test("outcome overlay is attached but hidden while the Starship is flying", async ({ page }) => {
