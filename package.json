@@ -1,0 +1,35 @@
+{
+  "name": "moonlander",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.17.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @moonlander/game",
+    "build": "npm run build -w @moonlander/game",
+    "preview": "npm run preview -w @moonlander/game",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:live": "playwright test e2e/live.spec.ts",
+    "typecheck": "npm run typecheck:sim && npm run typecheck:game && npm run typecheck:root",
+    "typecheck:sim": "tsc -p packages/sim/tsconfig.json --noEmit",
+    "typecheck:game": "tsc -p packages/game/tsconfig.json --noEmit",
+    "typecheck:root": "tsc -p tsconfig.json --noEmit",
+    "verify": "npm run typecheck && npm test && npm run test:e2e && npm run build",
+    "sim:demo": "tsx packages/sim/examples/headless-demo.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
