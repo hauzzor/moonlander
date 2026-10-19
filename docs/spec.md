@@ -2,28 +2,29 @@
 
 ## Goal
 
-Build a complete browser game in which a Starship flies endlessly through a
-deterministic, procedurally generated 2D field of curved walls and gates. The
-same deterministic simulation must be usable headlessly from Node for future
-controller training and evaluation.
+Build a complete browser game in which a Starship flies manually through a
+deterministic, enclosed, mostly horizontal tunnel that winds rightward. The
+ship uses aggressive Q/W thrusters and atmospheric drag for responsive,
+damped control. The same deterministic simulation must be usable headlessly
+from Node for controller training and evaluation.
 
 ## World and physics
 
 - 2D side view. Physics coordinates use +x right and +y up.
-- The ground is an infinite solid plane at `y = 0`.
-- The field extends infinitely in every direction; there is no hard world
-  boundary.
 - Fixed simulation step: `1 / 120` seconds. No wall-clock or frame-rate
   dependence inside `packages/sim`.
 - Gravity is `1.62 m/s²` downward.
-- The field is generated deterministically from an integer seed. The same seed
-  and action sequence must produce the same field, collisions, and state.
+- The world is an endless enclosed tunnel. There is no open sky, free obstacle
+  field, or infinite ground plane.
+- The tunnel is generated deterministically from an integer seed. The same seed
+  and action sequence must produce the same tunnel, collisions, and state.
 - The ship is a rigid body with position, velocity, angle, and angular
   velocity. Inertia is derived from mass and hull size.
-- No atmosphere, no drag, and no fuel. Thrust is available indefinitely.
-- The simulation is collision-resolved and deterministic. The implementation
-  must use swept collision or substepping so high-speed travel cannot tunnel
-  through thin walls or thin gates.
+- No fuel. Thrust is available indefinitely.
+- Atmospheric drag acts on linear and angular velocity. It is applied after
+  thrust, gravity, and torque and before position integration.
+- The simulation must use swept collision or substepping so high-speed travel
+  cannot pass through the tunnel walls.
 
 Fixed ship values:
 
@@ -32,12 +33,28 @@ Fixed ship values:
 - collision capsule radius `9` m, half-length `15` m
 - inertia `43800 kg·m²`, computed as
   `(mass * (length² + height²)) / 12`
-- thruster force `700` N each
+- thruster force `1800` N each
 - thruster cant `15` degrees
 - mounting points `{ x: -16, y: -9 }` and `{ x: 16, y: -9 }`
 
-The resulting linear and angular response is approximately 1.5× the previous
-lander response.
+Atmospheric drag:
+
+- linear drag `0.35 s⁻¹`
+- angular drag `0.25 s⁻¹`
+- discrete damping model:
+  `v = (v + a * dt) / (1 + LINEAR_DRAG * dt)` and
+  `ω = (ω + α * dt) / (1 + ANGULAR_DRAG * dt)`
+- drag applies to both linear axes and to angular velocity.
+
+Target response:
+
+- single-thruster lateral acceleration at least `2.0 m/s²`
+- both-thruster net climb at least `12 m/s²`
+- angular acceleration at least `0.5 rad/s²`
+- 90° turn from rest in at most `2.7 s`
+- release from 20 m/s loses at least 25% speed after one second
+- free-fall terminal speed at most `5 m/s`
+- no control latency beyond one fixed tick
 
 ## Ship and controls
 
@@ -48,43 +65,63 @@ lander response.
 - The right nozzle mirrors it. Pressing `W` fires it. Its reaction force points
   upward and to the left and produces counter-clockwise torque.
 - Both thrusters together produce balanced vertical lift.
+- `Q`/`W` are continuous while held. There is no auto-forward or boost control.
 - `R` starts a new run with a new seed.
 - Fuel does not exist. Thrust never depletes.
 
-## Field and hazards
+## Tunnel
 
-The field is made of deterministic square chunks. A chunk is addressed by
-integer coordinates `(cx, cy)` and covers:
+The tunnel is a continuous corridor with a constant total width of `68 m`
+(`TUNNEL_HALF_WIDTH = 34`).
 
-- `x` from `cx * FIELD_CHUNK_SIZE` to `(cx + 1) * FIELD_CHUNK_SIZE`
-- `y` from `cy * FIELD_CHUNK_SIZE` to `(cy + 1) * FIELD_CHUNK_SIZE`
+- The centerline starts at `TUNNEL_CENTER_Y = 60`.
+- The first `TUNNEL_START_STRAIGHT = 120` m of x is straight at `y = 60`,
+  including negative x.
+- After the straight section, the centerline bends using a seeded,
+  deterministic sum-of-sines function with a smooth C1 transition at
+  `x = 120`.
+- The absolute vertical bend is at most `TUNNEL_BEND_AMPLITUDE = 24` m from
+  `y = 60`.
+- The absolute centerline slope is at most `TUNNEL_MAX_SLOPE = 0.35`.
+- Wall samples are spaced every `TUNNEL_SAMPLE_STEP = 8` m.
+- Top and bottom walls are vertical offsets from the centerline:
+  `centerY(x) ± TUNNEL_HALF_WIDTH`.
+- Wall segments are assigned to exactly one `FIELD_CHUNK_SIZE = 80` m chunk
+  based on the segment midpoint. Adjacent chunks share endpoint coordinates so
+  the tunnel is continuous.
+- The tunnel is endless in both directions. Negative x is valid.
+- The tunnel has no gates, free walls, rocks, or moving hazards.
+- There is no difficulty ramp; width and bend limits are constant.
+- The ship starts at `START_POSITION = { x: 0, y: 60 }`, angle `0`, zero
+  velocity.
+- The old infinite ground is removed. The tunnel floor and ceiling are the
+  collision surfaces.
 
-`FIELD_CHUNK_SIZE` is `80`.
+Seed behavior:
 
-- Chunks entirely below the ground or intersecting the safe spawn circle are
-  empty.
-- The safe spawn circle is centered at `START_POSITION` with radius
-  `SAFE_SPAWN_RADIUS` (`100` m). No wall or gate may appear inside it.
-- Every other chunk contains one or two static curved walls and may contain one
-  gate.
-- Each wall is a simple polyline of 5–9 points inside the chunk, above the
-  ground. Walls are static; they never move or deform.
-- Each gate is a circular opening with radius `12..18` m, a unit `normal`, and
-  a solid frame. Gates are placed in free space at least `10` m from every wall
-  segment. Gates are optional scoring challenges.
-- No floating rocks, moving hazards, difficulty ramp, or moving walls exist in
-  this scope.
-- `getChunk(cx, cy)` returns the same chunk contents for the same seed and
-  coordinates regardless of call order. Negative chunk coordinates are valid.
-- `chunksInView(center, radius)` returns every chunk whose bounds intersect the
-  circle, sorted by `cy` ascending and then `cx` ascending.
+- Seeds are unsigned 32-bit integers.
+- The default seed is `1`, or the value of the `?seed=` URL parameter when it
+  is a valid integer.
+- `R` advances to a new deterministic seed. The game uses a fixed integer
+  transition such as `seed * 1664525 + 1013904223` truncated to 32 bits.
+- The seed input lets the player load any valid unsigned 32-bit seed. Loading a
+  seed resets the run deterministically.
+- The game must not use `Math.random` for seed selection or scene layout.
+
+## Progress and score
+
+- `progress = max(0, maxX - spawnX)`, where `spawnX` is the ship's initial x.
+- Progress is monotonic. Flying backward or upward does not increase it.
+- `score = floor(progress)`.
+- There are no gate bonuses or checkpoint bonuses.
+- The HUD shows hull, speed, progress, score, and thruster state. Fuel is not
+  displayed.
 
 ## Collision, damage, and outcomes
 
-- The ship collides with the ground, wall segments, and gate frames using a
-  capsule collision shape.
+- The ship collides with the tunnel floor and ceiling using its capsule shape.
 - A contact has an impact speed equal to the component of the ship's velocity
-  into the surface. Contacts below `DAMAGE_SPEED_THRESHOLD` (`2 m/s`) are
+  into the surface. Contacts at or below `DAMAGE_SPEED_THRESHOLD = 2 m/s` are
   harmless.
 - Above the threshold, damage is:
   `max(1, round((impactSpeed - 2) * 4))`.
@@ -96,30 +133,29 @@ integer coordinates `(cx, cy)` and covers:
   invulnerability, collisions still bounce but deal no damage.
 - `hull` starts at `100` and is clamped to `0..100`.
 - When `hull` reaches `0`, the outcome becomes `destroyed` and the simulation
-  freezes at that terminal state.
-- Crossing a gate plane inside the gate opening counts as a gate pass. A gate
-  can be passed only once and in either direction. A gate pass does not count
-  if the ship collides with that gate's frame during the same tick.
-- Progress is the farthest Euclidean distance from the spawn position reached
-  so far. It is monotonic; flying backward does not reduce it.
-- Score is `floor(progress) + gatesPassed * 50`.
-- The simulation stops advancing after `destroyed`.
+  freezes.
+- The only run outcomes are `flying` and `destroyed`.
 
 ## Camera and presentation
 
-- Canvas 2D side view with a star field, the infinite ground plane, curved
-  walls, glowing gates, the Starship, and visible thruster flames.
-- The camera smoothly follows the ship in two dimensions with a small
-  velocity-based look-ahead.
-- The field is rendered from chunks intersecting the camera view. Rendering
-  reads simulation state and never mutates it.
-- HUD telemetry: hull, speed, progress, score, and each thruster's active
-  state. Fuel is not displayed.
+- Canvas 2D side view with the tunnel interior, floor and ceiling walls,
+  structural ribs, atmospheric haze, subtle speed streaks or dust, and the
+  Starship with visible thruster flames.
+- The camera smoothly follows the ship in two dimensions with velocity
+  look-ahead on both axes and a small vertical bias. It never rotates.
+- The renderer may apply a subtle speed-based zoom-out. Camera target, snap, and
+  easing math remain deterministic presentation logic.
+- Rendering reads simulation and tunnel state; it never mutates them.
+- Remove gates, free walls, the star field, and the infinite ground from the
+  playable view.
+- HUD telemetry: hull, speed, progress, score, and each thruster's active state.
+  Fuel is not displayed.
 - The current seed is displayed. The player can copy it or enter a specific
-  seed to replay a course.
+  seed to replay a tunnel.
 - `R` generates a new seed and restarts.
 - Outcome overlay for a destroyed Starship, including the final score.
 - The page remains fully playable with `Q`, `W`, and `R`.
+- Instructions mention Q, W, and R, and describe staying inside the tunnel.
 
 ## Game test hooks
 
@@ -140,17 +176,6 @@ The playable page must expose these stable hooks for Playwright:
 
 The page remains fully playable with `Q`, `W`, and `R`. The HUD updates from
 the simulation state, never from render-only mutable state.
-
-## Seed behavior
-
-- Seeds are unsigned 32-bit integers.
-- The default seed is `1`, or the value of the `?seed=` URL parameter when it
-  is a valid integer.
-- `R` advances to a new deterministic seed. The game uses a fixed integer
-  transition such as `seed * 1664525 + 1013904223` truncated to 32 bits.
-- The seed input lets the player load any valid unsigned 32-bit seed. Loading a
-  seed resets the run deterministically.
-- The game must not use `Math.random` for seed selection or scene layout.
 
 ## Public simulation API
 
@@ -190,7 +215,6 @@ interface SimState {
   outcome: RunOutcome;
   score: number;
   progress: number;
-  gatesPassed: number;
 }
 
 interface ShipStart {
@@ -212,23 +236,21 @@ interface CurvedWall {
   points: readonly Vec2[];
 }
 
-interface Gate {
-  id: string;
-  center: Vec2;
-  radius: number;
-  normal: Vec2;
+interface Tunnel {
+  halfWidth: number;
+  centerAt(x: number): Vec2;
+  headingAt(x: number): number;
 }
 
 interface FieldChunk {
   coord: Vec2;
   walls: readonly CurvedWall[];
-  gates: readonly Gate[];
 }
 
 interface Field {
   seed: number;
   chunkSize: number;
-  groundY: number;
+  tunnel: Tunnel;
   getChunk(cx: number, cy: number): FieldChunk;
   chunksInView(center: Vec2, radius: number): readonly FieldChunk[];
 }
@@ -244,8 +266,11 @@ interface Observation {
   progress: number;
   score: number;
   nearestWallDistance: number;
-  nearestGateDistance: number;
-  nearestGateAngle: number;
+  tunnelCenterOffset: number;
+  tunnelHalfWidth: number;
+  tunnelHeading: number;
+  forwardSpeed: number;
+  lateralSpeed: number;
 }
 
 interface Controller {
@@ -266,7 +291,6 @@ Required exports:
 
 - `FIXED_DT = 1 / 120`
 - `GRAVITY = 1.62`
-- `GROUND_Y = 0`
 - `FIELD_CHUNK_SIZE = 80`
 - `INITIAL_HULL = 100`
 - `SHIP_MASS = 200`
@@ -275,23 +299,27 @@ Required exports:
 - `SHIP_RADIUS = 9`
 - `SHIP_CAPSULE_HALF_LENGTH = 15`
 - `SHIP_INERTIA = 43800`
-- `THRUSTER_FORCE = 700`
+- `THRUSTER_FORCE = 1800`
 - `THRUSTER_CANT = 15 degrees in radians`
 - `LEFT_MOUNT = { x: -16, y: -9 }`
 - `RIGHT_MOUNT = { x: 16, y: -9 }`
+- `LINEAR_DRAG = 0.35`
+- `ANGULAR_DRAG = 0.25`
+- `TUNNEL_HALF_WIDTH = 34`
+- `TUNNEL_CENTER_Y = 60`
+- `TUNNEL_START_STRAIGHT = 120`
+- `TUNNEL_BEND_AMPLITUDE = 24`
+- `TUNNEL_MAX_SLOPE = 0.35`
+- `TUNNEL_SAMPLE_STEP = 8`
 - `WALL_RADIUS = 2`
-- `GATE_FRAME_RADIUS = 2`
-- `GATE_MIN_RADIUS = 12`
-- `GATE_MAX_RADIUS = 18`
 - `DAMAGE_SPEED_THRESHOLD = 2`
 - `DAMAGE_SCALE = 4`
 - `INVULNERABILITY_SECONDS = 0.75`
 - `BOUNCE_RESTITUTION = 0.35`
-- `GATE_BONUS = 50`
-- `SAFE_SPAWN_RADIUS = 100`
-- `START_POSITION = { x: 0, y: 60 }`
 - `SENSOR_RANGE = 200`
-- `createField(seed)` creates a deterministic field.
+- `START_POSITION = { x: 0, y: 60 }`
+- `DEFAULT_SEED = 1`
+- `createField(seed)` creates a deterministic tunnel field.
 - `createSimulation(options?)` creates a deterministic simulation.
 
 Simulation semantics:
@@ -304,14 +332,14 @@ Simulation semantics:
   `SimState.thrusters` reports the last commanded action while flying. After
   `destroyed`, the state is frozen, so the last action remains visible; the game
   suppresses flames.
-- `simulation.reset(seed?)` resets the ship, hull, score, progress, gates, and
-  field. If `seed` is provided, it becomes the new seed; otherwise the current
-  seed is reused.
-- `simulation.field` exposes the seeded field for rendering and analysis.
+- `simulation.reset(seed?)` resets the ship, hull, score, progress, and tunnel.
+  If `seed` is provided, it becomes the new seed; otherwise the current seed is
+  reused.
+- `simulation.field` exposes the seeded tunnel for rendering and analysis.
 - If `SimulationOptions.field` is provided, the simulation uses that field for
   its lifetime and sets its seed from `field.seed`. `reset(seed?)` keeps the
   pinned field and ignores `seed`. This seam exists for deterministic tests and
-  custom or authored courses; the game uses seeded fields.
+  custom or authored tunnels.
 - `Controller` defines the seam for autonomous controllers.
 
 Observation semantics:
@@ -322,25 +350,27 @@ Observation semantics:
 - `angularVelocity` is in rad/s.
 - `hull`, `progress`, and `score` mirror the state.
 - `nearestWallDistance` is the distance from the ship hull surface to the
-  nearest wall surface within `SENSOR_RANGE`; it is `SENSOR_RANGE` when no wall
+  nearest tunnel wall within `SENSOR_RANGE`; it is `SENSOR_RANGE` when no wall
   is nearby and can be negative while the hull is penetrating a surface.
-- `nearestGateDistance` is the distance from the ship center to the nearest
-  unpassed gate center within `SENSOR_RANGE`; it is `-1` when no gate is nearby.
-- `nearestGateAngle` is the world angle to that gate center in radians; it is
-  `0` when no gate is nearby.
+- `tunnelCenterOffset` is `ship.y - tunnel.centerAt(ship.x).y`, positive above
+  the centerline.
+- `tunnelHalfWidth` is `tunnel.halfWidth`.
+- `tunnelHeading` is `tunnel.headingAt(ship.x)` in radians.
+- `forwardSpeed` is the velocity projected onto the tunnel tangent.
+- `lateralSpeed` is the velocity projected onto the tunnel normal.
 - All observation fields are finite numbers.
 
 ## Testing strategy
 
 - Vitest unit tests run in Node for the simulation and pure game helpers.
 - Playwright verifies the real page, Canvas presence, keyboard thrusters, HUD,
-  seed controls, and restart.
+  seed controls, input-driven progress, restart, and the hidden outcome overlay.
 - CI runs typecheck, unit tests, browser tests, and production build.
 - A live Playwright smoke test runs against the deployed GitHub Pages URL.
 
 ## Delivery
 
-The change is delivered as one combined build: deterministic side-view flight,
-a seeded infinite field with curved walls and gates, collision damage and
-scoring, the playable Canvas game, and the autonomy-ready observation and
-controller API with a headless example and updated docs.
+The change is delivered as one combined build: deterministic tunnel
+generation, aggressive thrusters and atmospheric drag, tunnel collision and
+forward-distance scoring, the playable Canvas game, and the autonomy-ready
+observation and controller API with a headless example and updated docs.

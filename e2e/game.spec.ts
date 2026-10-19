@@ -65,11 +65,14 @@ test("R starts a new seeded run and restores hull, score, and progress", async (
   const score = page.getByTestId("hud-score");
   const progress = page.getByTestId("hud-progress");
 
-  await expect
-    .poll(() => readNumericDataValue(hull), { timeout: 12_000 })
-    .toBeLessThan(100);
-  await expect.poll(() => readNumericDataValue(progress)).toBeGreaterThan(0);
-  await expect.poll(() => readNumericDataValue(score)).toBeGreaterThan(0);
+  await page.keyboard.down("q");
+  try {
+    await expect
+      .poll(() => readNumericDataValue(progress), { timeout: 8_000 })
+      .toBeGreaterThan(0);
+  } finally {
+    await page.keyboard.up("q");
+  }
 
   const resetValues = await page.evaluate(() => {
     const readDataValue = (testId: string): string | null =>
@@ -114,7 +117,7 @@ test("loading an unsigned seed updates the current seed display", async ({ page 
   await expect(page.getByTestId("seed-display")).toContainText(String(seed));
 });
 
-test("on-screen instructions mention Q, W, and R", async ({ page }) => {
+test("on-screen instructions mention Q, W, R, and the tunnel but not gates", async ({ page }) => {
   await page.goto("./");
 
   const instructions = page.getByTestId("instructions");
@@ -122,17 +125,24 @@ test("on-screen instructions mention Q, W, and R", async ({ page }) => {
   await expect(instructions).toContainText(/\bQ\b/i);
   await expect(instructions).toContainText(/\bW\b/i);
   await expect(instructions).toContainText(/\bR\b/i);
+  await expect(instructions).toContainText(/tunnel/i);
+  await expect(instructions).not.toContainText(/gates/i);
 });
 
-test("progress increases over time without input", async ({ page }) => {
+test("progress increases while holding Q", async ({ page }) => {
   await page.goto("./");
 
   const progress = page.getByTestId("hud-progress");
   const initialProgress = await readNumericDataValue(progress);
 
-  await expect
-    .poll(() => readNumericDataValue(progress), { timeout: 5_000 })
-    .toBeGreaterThan(initialProgress);
+  await page.keyboard.down("q");
+  try {
+    await expect
+      .poll(() => readNumericDataValue(progress), { timeout: 8_000 })
+      .toBeGreaterThan(initialProgress);
+  } finally {
+    await page.keyboard.up("q");
+  }
 });
 
 test("game canvas contains rendered pixels that differ from its background", async ({ page }) => {

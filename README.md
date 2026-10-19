@@ -1,8 +1,9 @@
 # Moonlander
 
-A 2D side-view Starship endless-course game. Fire the two canted thrusters to
-weave through a seeded, procedurally generated field of curved walls and gates.
-Thrust is unlimited; the hull is not.
+A 2D side-view Starship endless-tunnel game. Fire two aggressive canted
+thrusters to fly manually through a seeded, enclosed tunnel that winds
+rightward. Atmospheric drag makes inputs responsive and damped. Thrust is
+unlimited; the hull is not.
 
 Play: https://hauzzor.github.io/moonlander/
 
@@ -11,24 +12,27 @@ Play: https://hauzzor.github.io/moonlander/
 - `Q` — fire the left thruster (upward and rightward force, clockwise torque)
 - `W` — fire the right thruster (upward and leftward force, counter-clockwise torque)
 - `R` — start a new run with a new seed
-- Seed field — enter an unsigned 32-bit seed and load it to replay a course
+- Seed field — enter an unsigned 32-bit seed and load it to replay a tunnel
 
 Both thrusters together produce balanced vertical lift. There is no fuel.
 
 ## Rules
 
 - The Starship starts with 100 hull.
+- Atmospheric drag damps linear and angular velocity, so taps and corrections
+  settle quickly.
 - Impacts below roughly 2 m/s are harmless; faster impacts damage the hull and
-  bounce the ship away from the surface.
+  bounce the ship away from the tunnel wall.
 - A short invulnerability window follows each damaging impact.
 - The run ends when hull reaches zero.
-- Progress is the farthest distance reached from the spawn point.
-- Score is `floor(progress)` plus 50 points for each gate passed.
-- Gates are optional scoring challenges. Hitting a gate frame is a collision.
+- Progress is the maximum forward x-distance from the spawn point.
+- Score is `floor(progress)`.
+- There are no gates or free obstacles; the tunnel floor and ceiling are the
+  only collision surfaces.
 
-The field is infinite in every direction with a solid ground plane at `y = 0`.
-The course is generated deterministically from the seed, so the same seed and
-actions produce the same run.
+The tunnel is 68 m wide, enclosed, and endless in both directions. The first
+120 m is straight, then the seeded centerline bends gently rightward. The same
+seed and actions produce the same run.
 
 ## Project layout
 
@@ -40,7 +44,7 @@ actions produce the same run.
 - `.github/workflows/ci.yml` — verification, GitHub Pages deployment, and live
   browser tests against the deployed URL.
 
-The simulation is fixed at 120 Hz with a seeded infinite field and exposes
+The simulation is fixed at 120 Hz with a seeded endless tunnel and exposes
 observations and a `Controller` interface for autonomous control experiments:
 [`docs/autonomy.md`](docs/autonomy.md).
 

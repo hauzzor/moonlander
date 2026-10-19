@@ -9,49 +9,48 @@ import {
 const SEED = 7;
 const MAX_TICKS = 6000;
 const TELEMETRY_INTERVAL = 600;
-const WALL_CAUTION_DISTANCE = 60;
-const GATE_CAUTION_DISTANCE = 50;
+const WALL_CAUTION_DISTANCE = 14;
+const CENTER_DEADBAND = 4;
+const LEVEL_DEADBAND = 0.05;
 
 const coast: Action = { left: false, right: false };
 const both: Action = { left: true, right: true };
 const leftOnly: Action = { left: true, right: false };
 const rightOnly: Action = { left: false, right: true };
 
-// Scripted, deterministic autopilot. It holds a cruising altitude, levels
-// the hull, climbs when walls approach, and steers away from gate frames.
 const demoController: Controller = {
   act(observation: Observation): Action {
     if (observation.hull <= 0) {
       return coast;
     }
 
-    if (observation.y < 110 && observation.vy < 0.5) {
+    if (observation.nearestWallDistance < WALL_CAUTION_DISTANCE) {
+      return observation.tunnelCenterOffset < 0 ? both : coast;
+    }
+
+    if (observation.tunnelCenterOffset < -CENTER_DEADBAND) {
       return both;
     }
 
     if (
-      observation.nearestWallDistance < WALL_CAUTION_DISTANCE &&
-      observation.vy < 2
+      observation.tunnelCenterOffset > CENTER_DEADBAND &&
+      observation.lateralSpeed > 1
     ) {
-      return both;
-    }
-
-    if (
-      observation.nearestGateDistance >= 0 &&
-      observation.nearestGateDistance < GATE_CAUTION_DISTANCE &&
-      Math.abs(observation.nearestGateAngle) < 1.3
-    ) {
-      return observation.nearestGateAngle > 0 ? rightOnly : leftOnly;
+      return coast;
     }
 
     const predictedAngle =
       observation.angle + 0.35 * observation.angularVelocity;
-    if (Math.abs(predictedAngle) > 0.08) {
+    if (Math.abs(predictedAngle) > LEVEL_DEADBAND) {
       return predictedAngle > 0 ? leftOnly : rightOnly;
     }
 
-    if (observation.vy < 0.6) {
+    if (observation.lateralSpeed < -1) {
       return both;
+    }
+
+    if (observation.forwardSpeed < 6) {
+      return leftOnly;
     }
 
     return coast;
@@ -70,8 +69,11 @@ function printTelemetry(tick: number, observation: Observation): void {
     observation.progress,
     observation.score,
     observation.nearestWallDistance,
-    observation.nearestGateDistance,
-    observation.nearestGateAngle,
+    observation.tunnelCenterOffset,
+    observation.tunnelHalfWidth,
+    observation.tunnelHeading,
+    observation.forwardSpeed,
+    observation.lateralSpeed,
   ];
   if (!values.every(Number.isFinite)) {
     throw new Error("Non-finite telemetry");
@@ -87,7 +89,9 @@ function printTelemetry(tick: number, observation: Observation): void {
       `progress=${observation.progress.toFixed(1).padStart(7)}m ` +
       `score=${observation.score.toFixed(0).padStart(5)} ` +
       `wall=${observation.nearestWallDistance.toFixed(1).padStart(7)}m ` +
-      `gate=${observation.nearestGateDistance.toFixed(1).padStart(7)}m`,
+      `offset=${observation.tunnelCenterOffset.toFixed(1).padStart(6)}m ` +
+      `fwd=${observation.forwardSpeed.toFixed(2).padStart(6)}m/s ` +
+      `lat=${observation.lateralSpeed.toFixed(2).padStart(6)}m/s`,
   );
 }
 
@@ -115,5 +119,5 @@ printTelemetry(tick, finalObservation);
 const finalState = simulation.getState();
 console.log(
   `outcome: ${finalState.outcome} seed=${finalState.seed} ` +
-    `gates=${finalState.gatesPassed} score=${finalState.score}`,
+    `progress=${finalState.progress.toFixed(1)} score=${finalState.score}`,
 );

@@ -1,92 +1,104 @@
-import * as SimModule from "../src/index";
+import * as sim from "../src/index";
 import type {
   Action,
   CurvedWall,
   Field,
   FieldChunk,
-  Gate,
   Simulation,
   SimulationOptions,
   Vec2,
 } from "../src/index";
 
-type StarshipSimApi = {
-  readonly FIXED_DT: number;
-  readonly GRAVITY: number;
-  readonly GROUND_Y: number;
-  readonly FIELD_CHUNK_SIZE: number;
-  readonly INITIAL_HULL: number;
-  readonly SHIP_MASS: number;
-  readonly SHIP_LENGTH: number;
-  readonly SHIP_HEIGHT: number;
-  readonly SHIP_RADIUS: number;
-  readonly SHIP_CAPSULE_HALF_LENGTH: number;
-  readonly SHIP_INERTIA: number;
-  readonly THRUSTER_FORCE: number;
-  readonly THRUSTER_CANT: number;
-  readonly LEFT_MOUNT: Vec2;
-  readonly RIGHT_MOUNT: Vec2;
-  readonly WALL_RADIUS: number;
-  readonly GATE_FRAME_RADIUS: number;
-  readonly GATE_MIN_RADIUS: number;
-  readonly GATE_MAX_RADIUS: number;
-  readonly DAMAGE_SPEED_THRESHOLD: number;
-  readonly DAMAGE_SCALE: number;
-  readonly INVULNERABILITY_SECONDS: number;
-  readonly BOUNCE_RESTITUTION: number;
-  readonly GATE_BONUS: number;
-  readonly SAFE_SPAWN_RADIUS: number;
-  readonly START_POSITION: Vec2;
-  readonly SENSOR_RANGE: number;
-  createField(seed: number): Field;
-  createSimulation(options?: SimulationOptions): Simulation;
-};
+export { sim };
 
-export const sim = SimModule as unknown as StarshipSimApi;
 export const noThrusters: Action = { left: false, right: false };
 export const bothThrusters: Action = { left: true, right: true };
 
 interface ControlledFieldOptions {
   seed?: number;
-  walls?: readonly CurvedWall[];
-  gates?: readonly Gate[];
+  halfWidth?: number;
+  centerY?: number;
+  slope?: number;
+  walls?: boolean;
 }
 
 function circleIntersectsChunk(center: Vec2, radius: number, cx: number, cy: number) {
   const size = sim.FIELD_CHUNK_SIZE;
   const left = cx * size;
-  const right = left + size;
   const bottom = cy * size;
-  const top = bottom + size;
-  const closestX = Math.max(left, Math.min(center.x, right));
-  const closestY = Math.max(bottom, Math.min(center.y, top));
-  const dx = center.x - closestX;
-  const dy = center.y - closestY;
-  return dx * dx + dy * dy <= radius * radius;
+  const closestX = Math.max(left, Math.min(center.x, left + size));
+  const closestY = Math.max(bottom, Math.min(center.y, bottom + size));
+  return (center.x - closestX) ** 2 + (center.y - closestY) ** 2 <= radius ** 2;
 }
 
 export function createControlledField({
   seed = 71,
-  walls = [],
-  gates = [],
+  halfWidth = sim.TUNNEL_HALF_WIDTH,
+  centerY = sim.TUNNEL_CENTER_Y,
+  slope = 0,
+  walls = true,
 }: ControlledFieldOptions = {}): Field {
-  const makeChunk = (cx: number, cy: number): FieldChunk => ({
-    coord: { x: cx, y: cy },
-    walls: cx === 0 && cy === 0 ? walls : [],
-    gates: cx === 0 && cy === 0 ? gates : [],
-  });
+  const chunkSize = sim.FIELD_CHUNK_SIZE;
+  const centerAt = (x: number): Vec2 => ({ x, y: centerY + slope * x });
+  const tunnel = {
+    halfWidth,
+    centerAt,
+    headingAt: (_x: number) => Math.atan(slope),
+  };
+
+  const makeChunk = (cx: number, cy: number): FieldChunk => {
+    const chunkLeft = cx * chunkSize;
+    const chunkRight = (cx + 1) * chunkSize;
+    const firstSample = Math.floor(chunkLeft / sim.TUNNEL_SAMPLE_STEP) - 1;
+    const lastSample = Math.ceil(chunkRight / sim.TUNNEL_SAMPLE_STEP) + 1;
+    const chunkWalls: CurvedWall[] = [];
+
+    if (walls) {
+      for (let sample = firstSample; sample <= lastSample; sample += 1) {
+        const x0 = sample * sim.TUNNEL_SAMPLE_STEP;
+        const x1 = x0 + sim.TUNNEL_SAMPLE_STEP;
+        const midpointX = (x0 + x1) / 2;
+        if (Math.floor(midpointX / chunkSize) !== cx) {
+          continue;
+        }
+
+        const firstCenter = centerAt(x0);
+        const secondCenter = centerAt(x1);
+        for (const side of ["bottom", "top"] as const) {
+          const direction = side === "bottom" ? -1 : 1;
+          const first = {
+            x: x0,
+            y: firstCenter.y + direction * halfWidth,
+          };
+          const second = {
+            x: x1,
+            y: secondCenter.y + direction * halfWidth,
+          };
+          const midpointY = (first.y + second.y) / 2;
+          if (Math.floor(midpointY / chunkSize) !== cy) {
+            continue;
+          }
+          chunkWalls.push({
+            id: `controlled-${side}-${x0}`,
+            points: [first, second],
+          });
+        }
+      }
+    }
+
+    return { coord: { x: cx, y: cy }, walls: chunkWalls };
+  };
 
   return {
     seed,
-    chunkSize: sim.FIELD_CHUNK_SIZE,
-    groundY: sim.GROUND_Y,
+    chunkSize,
+    tunnel,
     getChunk: makeChunk,
     chunksInView(center: Vec2, radius: number): readonly FieldChunk[] {
-      const size = sim.FIELD_CHUNK_SIZE;
-      const minCx = Math.floor((center.x - radius) / size);
-      const maxCx = Math.floor((center.x + radius) / size);
-      const minCy = Math.floor((center.y - radius) / size);
-      const maxCy = Math.floor((center.y + radius) / size);
+      const minCx = Math.floor((center.x - radius) / chunkSize);
+      const maxCx = Math.floor((center.x + radius) / chunkSize);
+      const minCy = Math.floor((center.y - radius) / chunkSize);
+      const maxCy = Math.floor((center.y + radius) / chunkSize);
       const chunks: FieldChunk[] = [];
       for (let cy = minCy; cy <= maxCy; cy += 1) {
         for (let cx = minCx; cx <= maxCx; cx += 1) {
@@ -100,11 +112,8 @@ export function createControlledField({
   };
 }
 
-export function verticalWall(id: string, x: number): CurvedWall {
-  return {
-    id,
-    points: [1, 20, 40, 60, 79].map((y) => ({ x, y })),
-  };
+export function createWideTunnelField(seed = 71): Field {
+  return createControlledField({ seed, halfWidth: 1_000_000, walls: false });
 }
 
 export function createSimulationWithField(
@@ -112,13 +121,4 @@ export function createSimulationWithField(
   options: Omit<SimulationOptions, "field"> = {},
 ): Simulation {
   return sim.createSimulation({ ...options, field });
-}
-
-export function gateAt(
-  id: string,
-  center: Vec2 = { x: 40, y: 60 },
-  radius = 18,
-  normal: Vec2 = { x: 1, y: 0 },
-): Gate {
-  return { id, center, radius, normal };
 }

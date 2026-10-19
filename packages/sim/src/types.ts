@@ -28,7 +28,6 @@ export interface SimState {
   outcome: RunOutcome;
   score: number;
   progress: number;
-  gatesPassed: number;
 }
 
 export interface ShipStart {
@@ -38,37 +37,35 @@ export interface ShipStart {
   angularVelocity?: number;
 }
 
-export interface SimulationOptions {
-  seed?: number;
-  hull?: number;
-  start?: ShipStart;
-  field?: Field;
-}
-
 export interface CurvedWall {
   id: string;
   points: readonly Vec2[];
 }
 
-export interface Gate {
-  id: string;
-  center: Vec2;
-  radius: number;
-  normal: Vec2;
+export interface Tunnel {
+  halfWidth: number;
+  centerAt(x: number): Vec2;
+  headingAt(x: number): number;
 }
 
 export interface FieldChunk {
   coord: Vec2;
   walls: readonly CurvedWall[];
-  gates: readonly Gate[];
 }
 
 export interface Field {
   seed: number;
   chunkSize: number;
-  groundY: number;
+  tunnel: Tunnel;
   getChunk(cx: number, cy: number): FieldChunk;
   chunksInView(center: Vec2, radius: number): readonly FieldChunk[];
+}
+
+export interface SimulationOptions {
+  seed?: number;
+  hull?: number;
+  start?: ShipStart | undefined;
+  field?: Field;
 }
 
 export interface Observation {
@@ -82,8 +79,11 @@ export interface Observation {
   progress: number;
   score: number;
   nearestWallDistance: number;
-  nearestGateDistance: number;
-  nearestGateAngle: number;
+  tunnelCenterOffset: number;
+  tunnelHalfWidth: number;
+  tunnelHeading: number;
+  forwardSpeed: number;
+  lateralSpeed: number;
 }
 
 export interface Controller {

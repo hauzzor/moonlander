@@ -1,115 +1,104 @@
 import { describe, expect, it } from "vitest";
-import type { Vec2 } from "../src/index";
 import {
   bothThrusters,
   createControlledField,
   createSimulationWithField,
-  gateAt,
   noThrusters,
   sim,
-  verticalWall,
 } from "./helpers";
 
-function wallStart(x: number, y: number, velocity: Vec2) {
-  return {
-    position: { x, y },
-    velocity,
-    angle: Math.PI / 2,
-    angularVelocity: 0,
-  };
-}
+const floorContactY = sim.TUNNEL_CENTER_Y - sim.TUNNEL_HALF_WIDTH + sim.SHIP_RADIUS + sim.WALL_RADIUS;
+const ceilingContactY = sim.TUNNEL_CENTER_Y + sim.TUNNEL_HALF_WIDTH - sim.SHIP_RADIUS - sim.WALL_RADIUS;
 
 function expectedDamage(impactSpeed: number): number {
-  return Math.max(
-    1,
-    Math.round((impactSpeed - sim.DAMAGE_SPEED_THRESHOLD) * sim.DAMAGE_SCALE),
-  );
+  return Math.max(1, Math.round((impactSpeed - 2) * 4));
 }
 
-describe("Starship collision, damage, and scoring", () => {
-  it("bounces harmlessly from the ground below the 2 m/s impact threshold", () => {
-    const field = createControlledField();
-    const simulation = createSimulationWithField(field, {
-      start: {
-        position: { x: 40, y: sim.SHIP_RADIUS + 0.005 },
-        velocity: { x: 0, y: -1 },
-      },
+function gravityDragImpactSpeed(initialDownwardSpeed: number): number {
+  return (initialDownwardSpeed + sim.GRAVITY * sim.FIXED_DT) /
+    (1 + sim.LINEAR_DRAG * sim.FIXED_DT);
+}
+
+describe("tunnel collision, hull damage, and destruction", () => {
+  it.each([
+    { surface: "floor", y: floorContactY + 0.005, vy: -1, direction: 1 },
+    { surface: "ceiling", y: ceilingContactY - 0.005, vy: 1, direction: -1 },
+  ])("bounces harmlessly from the $surface below 2 m/s", ({ y, vy, direction }) => {
+    const simulation = createSimulationWithField(createControlledField(), {
+      start: { position: { x: 40, y }, velocity: { x: 0, y: vy } },
     });
 
     const state = simulation.step(noThrusters);
 
     expect(state.hull).toBe(100);
     expect(state.invulnerable).toBe(false);
-    expect(state.ship.velocity.y).toBeGreaterThan(0);
-    expect(state.ship.position.y).toBeGreaterThanOrEqual(sim.SHIP_RADIUS);
+    expect(state.ship.velocity.y * direction).toBeGreaterThan(0);
     expect(state.outcome).toBe("flying");
   });
 
-  it("bounces from a wall and applies the exact above-threshold damage formula", () => {
-    const field = createControlledField({ walls: [verticalWall("impact-wall", 40)] });
-    const impactSpeed = 4;
-    const simulation = createSimulationWithField(field, {
-      start: wallStart(
-        40 - sim.SHIP_RADIUS - sim.WALL_RADIUS + 0.005,
-        40,
-        { x: impactSpeed, y: 0 },
-      ),
-    });
+  it.each([2.1, 3.2, 4.25])(
+    "damages the floor impact above threshold by max(1, round((impact - 2) * 4)) at %s m/s",
+    (initialDownwardSpeed) => {
+      const simulation = createSimulationWithField(createControlledField(), {
+        start: {
+          position: { x: 40, y: floorContactY + 0.005 },
+          velocity: { x: 0, y: -initialDownwardSpeed },
+        },
+      });
 
-    const state = simulation.step(noThrusters);
+      const state = simulation.step(noThrusters);
+      const impactSpeed = gravityDragImpactSpeed(initialDownwardSpeed);
 
-    expect(state.hull).toBe(100 - expectedDamage(impactSpeed));
-    expect(state.invulnerable).toBe(true);
-    expect(state.ship.velocity.x).toBeLessThan(0);
-    expect(state.ship.position.x).toBeLessThan(40 - sim.SHIP_RADIUS - sim.WALL_RADIUS);
-  });
+      expect(state.hull).toBe(100 - expectedDamage(impactSpeed));
+      expect(state.invulnerable).toBe(true);
+      expect(state.ship.velocity.y).toBeGreaterThan(0);
+      expect(state.ship.position.y).toBeGreaterThanOrEqual(floorContactY - 0.01);
+    },
+  );
 
-  it("uses the ground impact speed after gravity in the exact damage formula", () => {
-    const field = createControlledField();
-    const initialDownwardSpeed = 4;
-    const simulation = createSimulationWithField(field, {
+  it("bounces from the ceiling and applies the same threshold and damage formula", () => {
+    const initialUpwardSpeed = 4;
+    const simulation = createSimulationWithField(createControlledField(), {
       start: {
-        position: { x: 40, y: sim.SHIP_RADIUS + 0.005 },
-        velocity: { x: 0, y: -initialDownwardSpeed },
+        position: { x: 40, y: ceilingContactY - 0.005 },
+        velocity: { x: 0, y: initialUpwardSpeed },
       },
     });
 
     const state = simulation.step(noThrusters);
-    const impactSpeed = initialDownwardSpeed + sim.GRAVITY * sim.FIXED_DT;
+    const impactSpeed =
+      (initialUpwardSpeed - sim.GRAVITY * sim.FIXED_DT) /
+      (1 + sim.LINEAR_DRAG * sim.FIXED_DT);
 
     expect(state.hull).toBe(100 - expectedDamage(impactSpeed));
     expect(state.invulnerable).toBe(true);
-    expect(state.ship.velocity.y).toBeGreaterThan(0);
+    expect(state.ship.velocity.y).toBeLessThan(0);
+    expect(state.ship.position.y).toBeLessThanOrEqual(ceilingContactY + 0.01);
   });
 
-  it("applies at most one damage event for simultaneous ground and wall contacts", () => {
-    const field = createControlledField({ walls: [verticalWall("corner-wall", 40)] });
-    const simulation = createSimulationWithField(field, {
+  it("applies no more than one damage event for multiple same-tick floor contacts", () => {
+    const initialDownwardSpeed = 8;
+    const simulation = createSimulationWithField(createControlledField(), {
       start: {
-        position: {
-          x: 40 - sim.SHIP_RADIUS - sim.WALL_RADIUS + 0.005,
-          y: sim.SHIP_CAPSULE_HALF_LENGTH + sim.SHIP_RADIUS + 0.005,
-        },
-        velocity: { x: 6, y: -8 },
+        position: { x: 40, y: floorContactY + 0.005 },
+        velocity: { x: 0, y: -initialDownwardSpeed },
         angle: Math.PI / 2,
       },
     });
 
     const state = simulation.step(noThrusters);
-    const highestImpactSpeed = 8 + sim.GRAVITY * sim.FIXED_DT;
+    const highestImpactSpeed = gravityDragImpactSpeed(initialDownwardSpeed);
 
     expect(state.hull).toBe(100 - expectedDamage(highestImpactSpeed));
     expect(state.invulnerable).toBe(true);
-    expect(state.ship.velocity.x).toBeLessThan(0);
     expect(state.ship.velocity.y).toBeGreaterThan(0);
   });
 
-  it("blocks repeat damage during invulnerability while continuing to bounce", () => {
-    const field = createControlledField();
-    const simulation = createSimulationWithField(field, {
+  it("continues bouncing but blocks repeat damage during invulnerability", () => {
+    const simulation = createSimulationWithField(createControlledField(), {
       start: {
-        position: { x: 40, y: sim.SHIP_RADIUS + 0.005 },
-        velocity: { x: 0, y: -2.1 },
+        position: { x: 40, y: floorContactY + 0.005 },
+        velocity: { x: 0, y: -2.5 },
         angle: Math.PI,
       },
     });
@@ -119,10 +108,10 @@ describe("Starship collision, damage, and scoring", () => {
     let protectedBounceObserved = false;
 
     expect(firstImpact.invulnerable).toBe(true);
-    expect(firstImpact.hull).toBe(99);
+    expect(firstImpact.hull).toBeLessThan(100);
     expect(firstImpact.ship.velocity.y).toBeGreaterThan(0);
 
-    for (let tick = 0; tick < 40; tick += 1) {
+    for (let tick = 0; tick < 60; tick += 1) {
       const state = simulation.step(bothThrusters);
       if (previous.ship.velocity.y < 0 && state.ship.velocity.y > 0) {
         protectedBounceObserved = true;
@@ -137,11 +126,10 @@ describe("Starship collision, damage, and scoring", () => {
   });
 
   it("sets destroyed at zero hull and freezes the terminal state", () => {
-    const field = createControlledField();
-    const simulation = createSimulationWithField(field, {
+    const simulation = createSimulationWithField(createControlledField(), {
       hull: 1,
       start: {
-        position: { x: 40, y: sim.SHIP_RADIUS + 0.005 },
+        position: { x: 40, y: floorContactY + 0.005 },
         velocity: { x: 0, y: -4 },
       },
     });
@@ -154,96 +142,17 @@ describe("Starship collision, damage, and scoring", () => {
     expect(simulation.getState()).toEqual(destroyed);
   });
 
-  it.each([
-    { direction: "forward", x: 39.9, velocity: 20 },
-    { direction: "reverse", x: 40.1, velocity: -20 },
-  ])("counts a clear gate-plane pass once in the $direction direction", ({ x, velocity }) => {
-    const field = createControlledField({ gates: [gateAt("scoring-gate")] });
-    const simulation = createSimulationWithField(field, {
+  it("prevents high-speed vertical travel from tunneling through the floor", () => {
+    const simulation = createSimulationWithField(createControlledField(), {
       start: {
-        position: { x, y: 60 },
-        velocity: { x: velocity, y: 0 },
-      },
-    });
-
-    const firstPass = simulation.step(noThrusters);
-    const later = simulation.step(noThrusters);
-
-    expect(firstPass.gatesPassed).toBe(1);
-    expect(firstPass.score).toBe(Math.floor(firstPass.progress) + sim.GATE_BONUS);
-    expect(later.gatesPassed).toBe(1);
-    expect(later.score).toBe(Math.floor(later.progress) + sim.GATE_BONUS);
-    expect(simulation.getObservation().nearestGateDistance).toBe(-1);
-  });
-
-  it("does not award a gate pass when the ship hits its frame", () => {
-    const field = createControlledField({ gates: [gateAt("frame-hit", { x: 40, y: 60 }, 18)] });
-    const simulation = createSimulationWithField(field, {
-      start: {
-        position: { x: 39.9, y: 77 },
-        velocity: { x: 20, y: 0 },
+        position: { x: 40, y: 60 },
+        velocity: { x: 0, y: -10_000 },
       },
     });
 
     const state = simulation.step(noThrusters);
 
-    expect(state.gatesPassed).toBe(0);
-    expect(state.score).toBe(Math.floor(state.progress));
-  });
-
-  it("keeps progress monotonic and score equal to distance plus one-time gate bonuses", () => {
-    const field = createControlledField({
-      walls: [verticalWall("return-wall", 75)],
-      gates: [gateAt("return-gate")],
-    });
-    const simulation = createSimulationWithField(field, {
-      start: {
-        position: { x: 30, y: 60 },
-        velocity: { x: 10, y: 0 },
-      },
-    });
-    let previousX = simulation.getState().ship.position.x;
-    let previousProgress = simulation.getState().progress;
-    let crossedForward = false;
-    let crossedBackward = false;
-    let state = simulation.getState();
-
-    for (let tick = 0; tick < 1200 && !crossedBackward; tick += 1) {
-      const action = tick % 25 < 6 ? bothThrusters : noThrusters;
-      state = simulation.step(action);
-      const currentX = state.ship.position.x;
-      if (previousX < 40 && currentX >= 40) {
-        crossedForward = true;
-      }
-      if (previousX > 40 && currentX <= 40) {
-        crossedBackward = true;
-      }
-      expect(state.progress).toBeGreaterThanOrEqual(previousProgress);
-      expect(state.score).toBe(
-        Math.floor(state.progress) + sim.GATE_BONUS * state.gatesPassed,
-      );
-      previousX = currentX;
-      previousProgress = state.progress;
-    }
-
-    expect(crossedForward).toBe(true);
-    expect(crossedBackward).toBe(true);
-    expect(state.gatesPassed).toBe(1);
-  });
-
-  it("sweeps a very fast ship against a thin wall instead of tunneling through", () => {
-    const field = createControlledField({ walls: [verticalWall("thin-wall", 40)] });
-    const simulation = createSimulationWithField(field, {
-      start: {
-        position: { x: 0, y: 60 },
-        velocity: { x: 10000, y: 0 },
-        angle: Math.PI / 2,
-      },
-    });
-
-    const state = simulation.step(noThrusters);
-
-    expect(state.ship.position.x).toBeLessThan(40);
+    expect(state.ship.position.y).toBeGreaterThanOrEqual(floorContactY - 0.01);
     expect(state.hull).toBe(0);
     expect(state.outcome).toBe("destroyed");
   });

@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { Controller, Observation } from "../src/index";
+import type { Action, Controller, Observation } from "../src/index";
 import {
   bothThrusters,
   createControlledField,
   createSimulationWithField,
-  gateAt,
+  createWideTunnelField,
   noThrusters,
   sim,
-  verticalWall,
 } from "./helpers";
 
 const observationKeys = [
@@ -21,19 +20,21 @@ const observationKeys = [
   "progress",
   "score",
   "nearestWallDistance",
-  "nearestGateDistance",
-  "nearestGateAngle",
+  "tunnelCenterOffset",
+  "tunnelHalfWidth",
+  "tunnelHeading",
+  "forwardSpeed",
+  "lateralSpeed",
 ].sort();
 
-function expectFiniteObservation(observation: Observation) {
+function expectFiniteObservation(observation: Observation): void {
   expect(Object.values(observation).every(Number.isFinite)).toBe(true);
 }
 
-describe("Starship autonomy observation API", () => {
-  it("returns exactly the documented finite fields without landing or fuel data", () => {
-    const field = createControlledField({ seed: 41 });
-    const simulation = createSimulationWithField(field);
-    const observation = simulation.getObservation();
+describe("tunnel-aware autonomy observation API", () => {
+  it("returns exactly the new finite fields and no gate, fuel, altitude, or pad fields", () => {
+    const observation = createSimulationWithField(createControlledField({ seed: 41 }))
+      .getObservation();
 
     expect(Object.keys(observation).sort()).toEqual(observationKeys);
     expect(observation).toEqual({
@@ -46,90 +47,122 @@ describe("Starship autonomy observation API", () => {
       hull: 100,
       progress: 0,
       score: 0,
-      nearestWallDistance: sim.SENSOR_RANGE,
-      nearestGateDistance: -1,
-      nearestGateAngle: 0,
+      nearestWallDistance: 23,
+      tunnelCenterOffset: 0,
+      tunnelHalfWidth: 34,
+      tunnelHeading: 0,
+      forwardSpeed: 0,
+      lateralSpeed: 0,
     });
     expectFiniteObservation(observation);
-    for (const removedField of ["fuel", "altitude", "padOffsetX", "pad"]) {
+    for (const removedField of [
+      "fuel",
+      "gatesPassed",
+      "nearestGateDistance",
+      "nearestGateAngle",
+      "altitude",
+      "padOffsetX",
+      "pad",
+    ]) {
       expect(removedField in observation).toBe(false);
     }
   });
 
-  it("measures nearest wall clearance from the capsule hull surface", () => {
-    const field = createControlledField({ walls: [verticalWall("sensor-wall", 40)] });
-    const observation = createSimulationWithField(field).getObservation();
+  it("reports signed center offset and world velocity components in a straight tunnel", () => {
+    const simulation = createSimulationWithField(createControlledField(), {
+      start: {
+        position: { x: 0, y: 66 },
+        velocity: { x: 3, y: 4 },
+      },
+    });
+    const observation = simulation.getObservation();
 
-    expect(observation.nearestWallDistance).toBeCloseTo(
-      40 - sim.SHIP_CAPSULE_HALF_LENGTH - sim.SHIP_RADIUS - sim.WALL_RADIUS,
+    expect(observation.tunnelCenterOffset).toBe(6);
+    expect(observation.tunnelHalfWidth).toBe(34);
+    expect(observation.tunnelHeading).toBe(0);
+    expect(observation.forwardSpeed).toBe(3);
+    expect(observation.lateralSpeed).toBe(4);
+    expectFiniteObservation(observation);
+  });
+
+  it("projects velocity onto the tangent and normal of a sloped tunnel", () => {
+    const slope = 0.2;
+    const heading = Math.atan(slope);
+    const expectedForwardSpeed = 5;
+    const expectedLateralSpeed = 2;
+    const velocity = {
+      x: expectedForwardSpeed * Math.cos(heading) - expectedLateralSpeed * Math.sin(heading),
+      y: expectedForwardSpeed * Math.sin(heading) + expectedLateralSpeed * Math.cos(heading),
+    };
+    const simulation = createSimulationWithField(
+      createControlledField({ centerY: 60, slope }),
+      { start: { position: { x: 10, y: 65 }, velocity } },
+    );
+    const observation = simulation.getObservation();
+
+    expect(observation.tunnelCenterOffset).toBeCloseTo(3, 12);
+    expect(observation.tunnelHeading).toBeCloseTo(heading, 12);
+    expect(observation.forwardSpeed).toBeCloseTo(expectedForwardSpeed, 12);
+    expect(observation.lateralSpeed).toBeCloseTo(expectedLateralSpeed, 12);
+    expectFiniteObservation(observation);
+  });
+
+  it("measures nearest wall distance from the hull surface and uses SENSOR_RANGE without walls", () => {
+    const straight = createSimulationWithField(createControlledField()).getObservation();
+    const wide = createSimulationWithField(createWideTunnelField()).getObservation();
+
+    expect(straight.nearestWallDistance).toBeCloseTo(
+      sim.TUNNEL_HALF_WIDTH - sim.SHIP_RADIUS - sim.WALL_RADIUS,
       12,
     );
+    expect(wide.nearestWallDistance).toBe(sim.SENSOR_RANGE);
   });
 
-  it("reports the nearest unpassed gate center distance and world angle", () => {
-    const field = createControlledField({ gates: [gateAt("sensor-gate", { x: 30, y: 60 })] });
-    const observation = createSimulationWithField(field).getObservation();
-
-    expect(observation.nearestGateDistance).toBe(30);
-    expect(observation.nearestGateAngle).toBe(0);
-  });
-
-  it("uses the documented no-nearby-wall and no-gate sentinels", () => {
-    const field = createControlledField();
-    const observation = createSimulationWithField(field).getObservation();
-
-    expect(observation.nearestWallDistance).toBe(sim.SENSOR_RANGE);
-    expect(observation.nearestGateDistance).toBe(-1);
-    expect(observation.nearestGateAngle).toBe(0);
-  });
-
-  it("updates finite state and course observations after thrust and gravity steps", () => {
-    const field = createControlledField();
-    const simulation = createSimulationWithField(field);
+  it("keeps observations finite and synchronized with state across steps", () => {
+    const simulation = createSimulationWithField(createWideTunnelField());
     const before = simulation.getObservation();
 
     for (const action of [bothThrusters, noThrusters, { left: true, right: false }]) {
-      simulation.step(action);
+      const state = simulation.step(action);
       const observation = simulation.getObservation();
       expectFiniteObservation(observation);
       expect(Object.keys(observation).sort()).toEqual(observationKeys);
+      expect(observation.x).toBe(state.ship.position.x);
+      expect(observation.y).toBe(state.ship.position.y);
+      expect(observation.hull).toBe(state.hull);
+      expect(observation.progress).toBe(state.progress);
+      expect(observation.score).toBe(state.score);
     }
 
-    const after = simulation.getObservation();
-    expect(after.y).not.toBe(before.y);
-    expect(after.hull).toBe(100);
+    expect(simulation.getObservation().y).not.toBe(before.y);
   });
 
-  it("supports typed controllers and deterministic controller-driven replay", () => {
-    const fieldA = sim.createField(41);
-    const fieldB = sim.createField(41);
-    const first = sim.createSimulation({ seed: 41, field: fieldA });
-    const second = sim.createSimulation({ seed: 41, field: fieldB });
+  it("types tunnel-aware controllers and deterministically replays their actions", () => {
+    const first = sim.createSimulation({ seed: 41 });
+    const second = sim.createSimulation({ seed: 41 });
     const controller: Controller = {
-      act(observation: Observation) {
+      act(observation: Observation): Action {
         return {
-          left: observation.nearestGateAngle > 0 || observation.vy < -0.2,
-          right: observation.nearestGateAngle < 0 || observation.hull < 50,
+          left: observation.tunnelCenterOffset < -2 || observation.lateralSpeed < -0.5,
+          right: observation.tunnelCenterOffset > 2 || observation.nearestWallDistance < 8,
         };
       },
     };
-    const actions = [];
 
-    for (let tick = 0; tick < 120; tick += 1) {
+    for (let tick = 0; tick < 240; tick += 1) {
       const action = controller.act(first.getObservation());
-      actions.push(action);
       expect(first.step(action)).toEqual(second.step(action));
     }
 
-    expect(actions.length).toBe(120);
     expect(controller.reset).toBeUndefined();
     expectFiniteObservation(first.getObservation());
+    expect("nearestGateDistance" in first.getObservation()).toBe(false);
   });
 
   it("permits a controller to implement its optional reset hook", () => {
     let resets = 0;
     const controller: Controller = {
-      act(_observation: Observation) {
+      act(_observation: Observation): Action {
         return noThrusters;
       },
       reset() {

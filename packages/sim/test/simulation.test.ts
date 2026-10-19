@@ -1,73 +1,25 @@
 import { describe, expect, it } from "vitest";
-import type { Action, CurvedWall, Field, SimulationOptions } from "../src/index";
+import type { Action, ShipStart } from "../src/index";
 import {
   bothThrusters,
   createControlledField,
   createSimulationWithField,
+  createWideTunnelField,
   noThrusters,
   sim,
 } from "./helpers";
 
-function findGeneratedWallApproach(field: Field): {
-  start: NonNullable<SimulationOptions["start"]>;
-  wall: CurvedWall;
-} {
-  for (let cy = 1; cy <= 12; cy += 1) {
-    for (let cx = -12; cx <= 12; cx += 1) {
-      const chunk = field.getChunk(cx, cy);
-      for (const wall of chunk.walls) {
-        for (let index = 0; index + 1 < wall.points.length; index += 1) {
-          const first = wall.points[index]!;
-          const second = wall.points[index + 1]!;
-          const dx = second.x - first.x;
-          const dy = second.y - first.y;
-          const length = Math.hypot(dx, dy);
-          if (length === 0) {
-            continue;
-          }
-          const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
-          if (
-            Math.hypot(
-              midpoint.x - sim.START_POSITION.x,
-              midpoint.y - sim.START_POSITION.y,
-            ) <= sim.SAFE_SPAWN_RADIUS ||
-            midpoint.y <= sim.SHIP_RADIUS + sim.WALL_RADIUS + 1
-          ) {
-            continue;
-          }
-          const hasClearanceFromGates = chunk.gates.every(
-            (gate) =>
-              Math.hypot(gate.center.x - midpoint.x, gate.center.y - midpoint.y) >
-              gate.radius + sim.SHIP_RADIUS + sim.WALL_RADIUS + 2,
-          );
-          if (!hasClearanceFromGates) {
-            continue;
-          }
-          const normal = { x: -dy / length, y: dx / length };
-          return {
-            wall,
-            start: {
-              position: {
-                x: midpoint.x + normal.x * (sim.SHIP_RADIUS + sim.WALL_RADIUS - 0.1),
-                y: midpoint.y + normal.y * (sim.SHIP_RADIUS + sim.WALL_RADIUS - 0.1),
-              },
-              velocity: { x: -normal.x * 5, y: -normal.y * 5 },
-              angle: Math.atan2(dy, dx),
-              angularVelocity: 0,
-            },
-          };
-        }
-      }
-    }
-  }
-  throw new Error("Expected seeded chunks outside the safe spawn to contain a wall segment");
+const leftThruster: Action = { left: true, right: false };
+const rightThruster: Action = { left: false, right: true };
+
+function damageFreeSimulation(start?: ShipStart) {
+  return createSimulationWithField(createWideTunnelField(), { start });
 }
 
-describe("Starship fixed-step simulation", () => {
-  it("exports the documented Starship physics, field, damage, and scoring constants", () => {
+describe("fixed-step tunnel simulation", () => {
+  it("exports the new physics and tunnel constants without gate or ground constants", () => {
     expect(sim.FIXED_DT).toBe(1 / 120);
     expect(sim.GRAVITY).toBe(1.62);
-    expect(sim.GROUND_Y).toBe(0);
     expect(sim.FIELD_CHUNK_SIZE).toBe(80);
     expect(sim.INITIAL_HULL).toBe(100);
     expect(sim.SHIP_MASS).toBe(200);
@@ -76,25 +28,31 @@ describe("Starship fixed-step simulation", () => {
     expect(sim.SHIP_RADIUS).toBe(9);
     expect(sim.SHIP_CAPSULE_HALF_LENGTH).toBe(15);
     expect(sim.SHIP_INERTIA).toBe(43800);
-    expect(sim.THRUSTER_FORCE).toBe(700);
+    expect(sim.THRUSTER_FORCE).toBe(1800);
     expect(sim.THRUSTER_CANT).toBe((15 * Math.PI) / 180);
     expect(sim.LEFT_MOUNT).toEqual({ x: -16, y: -9 });
     expect(sim.RIGHT_MOUNT).toEqual({ x: 16, y: -9 });
+    expect(sim.LINEAR_DRAG).toBe(0.35);
+    expect(sim.ANGULAR_DRAG).toBe(0.25);
+    expect(sim.TUNNEL_HALF_WIDTH).toBe(34);
+    expect(sim.TUNNEL_CENTER_Y).toBe(60);
+    expect(sim.TUNNEL_START_STRAIGHT).toBe(120);
+    expect(sim.TUNNEL_BEND_AMPLITUDE).toBe(24);
+    expect(sim.TUNNEL_MAX_SLOPE).toBe(0.35);
+    expect(sim.TUNNEL_SAMPLE_STEP).toBe(8);
     expect(sim.WALL_RADIUS).toBe(2);
-    expect(sim.GATE_FRAME_RADIUS).toBe(2);
-    expect(sim.GATE_MIN_RADIUS).toBe(12);
-    expect(sim.GATE_MAX_RADIUS).toBe(18);
     expect(sim.DAMAGE_SPEED_THRESHOLD).toBe(2);
     expect(sim.DAMAGE_SCALE).toBe(4);
     expect(sim.INVULNERABILITY_SECONDS).toBe(0.75);
     expect(sim.BOUNCE_RESTITUTION).toBe(0.35);
-    expect(sim.GATE_BONUS).toBe(50);
-    expect(sim.SAFE_SPAWN_RADIUS).toBe(100);
-    expect(sim.START_POSITION).toEqual({ x: 0, y: 60 });
     expect(sim.SENSOR_RANGE).toBe(200);
+    expect(sim.START_POSITION).toEqual({ x: 0, y: 60 });
+    expect(sim.DEFAULT_SEED).toBe(1);
+    expect("GROUND_Y" in sim).toBe(false);
+    expect("GATE_BONUS" in sim).toBe(false);
   });
 
-  it("starts at the exact documented default state without a fuel property", () => {
+  it("starts at the exact default state without gatesPassed or fuel", () => {
     const state = sim.createSimulation().getState();
 
     expect(state).toEqual({
@@ -113,15 +71,13 @@ describe("Starship fixed-step simulation", () => {
       outcome: "flying",
       score: 0,
       progress: 0,
-      gatesPassed: 0,
     });
+    expect("gatesPassed" in state).toBe(false);
     expect("fuel" in state).toBe(false);
   });
 
-  it("advances exactly one 1/120-second tick and derives time from the tick", () => {
-    expect(sim.FIXED_DT).toBe(1 / 120);
-
-    const simulation = sim.createSimulation();
+  it("advances exactly one 1/120-second tick and derives time from tick", () => {
+    const simulation = damageFreeSimulation();
     const first = simulation.step(noThrusters);
     const second = simulation.step(noThrusters);
 
@@ -131,128 +87,225 @@ describe("Starship fixed-step simulation", () => {
     expect(second.time).toBe(2 * sim.FIXED_DT);
   });
 
-  it("accelerates downward at 1.62 m/s² under gravity with both thrusters off", () => {
-    expect(sim.GRAVITY).toBe(1.62);
-
-    const state = sim.createSimulation().step(noThrusters);
+  it("applies gravity and discrete linear drag on the first no-thrust tick", () => {
+    const state = damageFreeSimulation().step(noThrusters);
+    const expectedVy = (-sim.GRAVITY * sim.FIXED_DT) /
+      (1 + sim.LINEAR_DRAG * sim.FIXED_DT);
 
     expect(state.ship.velocity.x).toBe(0);
-    expect(state.ship.velocity.y).toBeCloseTo(-sim.GRAVITY * sim.FIXED_DT, 12);
+    expect(state.ship.velocity.y).toBeCloseTo(expectedVy, 14);
     expect(state.ship.angularVelocity).toBe(0);
     expect(state.thrusters).toEqual(noThrusters);
   });
 
-  it("fires Q and W with the documented lateral-force and torque signs", () => {
-    const left = sim.createSimulation().step({ left: true, right: false });
-    const right = sim.createSimulation().step({ left: false, right: true });
-    const leftForceX = sim.THRUSTER_FORCE * Math.sin(sim.THRUSTER_CANT);
-    const horizontalDelta = (leftForceX / sim.SHIP_MASS) * sim.FIXED_DT;
+  it("uses the exact 1800 N, 15-degree, gravity, and discrete-drag velocities for Q and W", () => {
+    const left = damageFreeSimulation().step(leftThruster);
+    const right = damageFreeSimulation().step(rightThruster);
+    const dt = sim.FIXED_DT;
+    const linearDamping = 1 + sim.LINEAR_DRAG * dt;
+    const angularDamping = 1 + sim.ANGULAR_DRAG * dt;
+    const forceX = sim.THRUSTER_FORCE * Math.sin(sim.THRUSTER_CANT);
+    const forceY = sim.THRUSTER_FORCE * Math.cos(sim.THRUSTER_CANT);
+    const leftTorque = sim.LEFT_MOUNT.x * forceY - sim.LEFT_MOUNT.y * forceX;
+    const rightTorque = sim.RIGHT_MOUNT.x * forceY - sim.RIGHT_MOUNT.y * -forceX;
 
-    expect(left.ship.velocity.x).toBeCloseTo(horizontalDelta, 12);
+    expect(left.ship.velocity.x).toBeCloseTo((forceX / sim.SHIP_MASS * dt) / linearDamping, 13);
+    expect(left.ship.velocity.y).toBeCloseTo(
+      ((forceY / sim.SHIP_MASS - sim.GRAVITY) * dt) / linearDamping,
+      13,
+    );
+    expect(left.ship.angularVelocity).toBeCloseTo(
+      (leftTorque / sim.SHIP_INERTIA * dt) / angularDamping,
+      13,
+    );
+    expect(right.ship.velocity.x).toBeCloseTo((-forceX / sim.SHIP_MASS * dt) / linearDamping, 13);
+    expect(right.ship.velocity.y).toBeCloseTo(
+      ((forceY / sim.SHIP_MASS - sim.GRAVITY) * dt) / linearDamping,
+      13,
+    );
+    expect(right.ship.angularVelocity).toBeCloseTo(
+      (rightTorque / sim.SHIP_INERTIA * dt) / angularDamping,
+      13,
+    );
     expect(left.ship.angularVelocity).toBeLessThan(0);
-    expect(left.thrusters).toEqual({ left: true, right: false });
-    expect(right.ship.velocity.x).toBeCloseTo(-horizontalDelta, 12);
     expect(right.ship.angularVelocity).toBeGreaterThan(0);
-    expect(right.thrusters).toEqual({ left: false, right: true });
+    expect(left.thrusters).toEqual(leftThruster);
+    expect(right.thrusters).toEqual(rightThruster);
   });
 
-  it("balances lateral force and torque while both thrusters provide lift", () => {
-    const state = sim.createSimulation().step(bothThrusters);
-    const verticalAcceleration =
-      (2 * sim.THRUSTER_FORCE * Math.cos(sim.THRUSTER_CANT)) / sim.SHIP_MASS -
-      sim.GRAVITY;
+  it("balances both thrusters laterally and rotationally while producing net lift", () => {
+    const state = damageFreeSimulation().step(bothThrusters);
+    const netVerticalAcceleration =
+      (2 * sim.THRUSTER_FORCE * Math.cos(sim.THRUSTER_CANT)) / sim.SHIP_MASS - sim.GRAVITY;
+    const expectedVy = (netVerticalAcceleration * sim.FIXED_DT) /
+      (1 + sim.LINEAR_DRAG * sim.FIXED_DT);
 
-    expect(state.ship.velocity.x).toBeCloseTo(0, 12);
-    expect(state.ship.angularVelocity).toBeCloseTo(0, 12);
-    expect(state.ship.velocity.y).toBeCloseTo(verticalAcceleration * sim.FIXED_DT, 12);
+    expect(state.ship.velocity.x).toBeCloseTo(0, 14);
+    expect(state.ship.angularVelocity).toBeCloseTo(0, 14);
+    expect(state.ship.velocity.y).toBeCloseTo(expectedVy, 13);
+    expect(state.ship.velocity.y).toBeGreaterThan(0);
     expect(state.thrusters).toEqual(bothThrusters);
   });
 
-  it("has approximately 1.5x the old lander's linear and angular response", () => {
-    const left = sim.createSimulation().step({ left: true, right: false });
-    const oldMass = 200;
-    const oldForce = 500;
-    const oldCant = (15 * Math.PI) / 180;
-    const oldLeftMount = { x: -12, y: -12 };
-    const oldInertia = (oldMass * (36 ** 2 + 24 ** 2)) / 12;
-    const oldForceVector = {
-      x: oldForce * Math.sin(oldCant),
-      y: oldForce * Math.cos(oldCant),
-    };
-    const oldTorque =
-      oldLeftMount.x * oldForceVector.y - oldLeftMount.y * oldForceVector.x;
-    const newForceVector = {
-      x: sim.THRUSTER_FORCE * Math.sin(sim.THRUSTER_CANT),
-      y: sim.THRUSTER_FORCE * Math.cos(sim.THRUSTER_CANT),
-    };
-    const newTorque =
-      sim.LEFT_MOUNT.x * newForceVector.y - sim.LEFT_MOUNT.y * newForceVector.x;
+  it("meets the one-tick lateral, net-climb, and angular acceleration targets", () => {
+    const left = damageFreeSimulation().step(leftThruster);
+    const both = damageFreeSimulation().step(bothThrusters);
 
-    // The previous landing constants were 500 N, 200 kg, a 36x24 m box
-    // (26,400 kg·m² inertia), and a (-12,-12) m left mount. Compare force/mass
-    // and |torque|/inertia directly against the documented Starship constants.
-    const linearRatio = (sim.THRUSTER_FORCE / sim.SHIP_MASS) / (oldForce / oldMass);
-    const angularRatio =
-      (Math.abs(newTorque) / sim.SHIP_INERTIA) / (Math.abs(oldTorque) / oldInertia);
-    const measuredAngularAcceleration = Math.abs(left.ship.angularVelocity) / sim.FIXED_DT;
-
-    expect(linearRatio).toBeGreaterThanOrEqual(1.2);
-    expect(linearRatio).toBeLessThanOrEqual(1.6);
-    expect(angularRatio).toBeGreaterThanOrEqual(1.2);
-    expect(angularRatio).toBeLessThanOrEqual(1.6);
-    expect(measuredAngularAcceleration).toBeCloseTo(Math.abs(newTorque) / sim.SHIP_INERTIA, 10);
+    expect(Math.abs(left.ship.velocity.x) / sim.FIXED_DT).toBeGreaterThanOrEqual(2.0);
+    expect(both.ship.velocity.y / sim.FIXED_DT).toBeGreaterThanOrEqual(12);
+    expect(Math.abs(left.ship.angularVelocity) / sim.FIXED_DT).toBeGreaterThanOrEqual(0.5);
   });
 
-  it("keeps both thrusters available indefinitely and has no fuel state", () => {
-    const field = createControlledField({ seed: 19 });
-    const simulation = createSimulationWithField(field);
+  it("turns 90 degrees from rest within 2.7 seconds of continuous W input", () => {
+    const simulation = damageFreeSimulation();
     let state = simulation.getState();
+    const maximumTicks = Math.floor(2.7 / sim.FIXED_DT);
 
-    for (let tick = 0; tick < 2400; tick += 1) {
-      state = simulation.step(bothThrusters);
+    for (let tick = 0; tick < maximumTicks && state.ship.angle < Math.PI / 2; tick += 1) {
+      state = simulation.step(rightThruster);
     }
 
-    expect(state.tick).toBe(2400);
-    expect(state.thrusters).toEqual(bothThrusters);
-    expect(state.outcome).toBe("flying");
-    expect(state.ship.position.y).toBeGreaterThan(60);
-    expect("fuel" in state).toBe(false);
-    expect("fuel" in simulation.getObservation()).toBe(false);
+    expect(state.ship.angle).toBeGreaterThanOrEqual(Math.PI / 2);
+    expect(state.tick * sim.FIXED_DT).toBeLessThanOrEqual(2.7);
   });
 
-  it("replays identical seeded state and generated-field collision effects", () => {
-    const seed = 314159;
-    const field = sim.createField(seed);
-    const { start } = findGeneratedWallApproach(field);
-    const options = { seed, start };
+  it("decays unpowered linear and angular velocities by their exact per-tick factors", () => {
+    const start = {
+      position: { x: 0, y: 60 },
+      velocity: { x: 20, y: 0 },
+      angle: 0.3,
+      angularVelocity: 2,
+    };
+    const simulation = damageFreeSimulation(start);
+    const afterOne = simulation.step(noThrusters);
+    const expectedVxAfterOne = 20 / (1 + sim.LINEAR_DRAG * sim.FIXED_DT);
+    const expectedOmegaAfterOne = 2 / (1 + sim.ANGULAR_DRAG * sim.FIXED_DT);
+
+    expect(afterOne.ship.velocity.x).toBeCloseTo(expectedVxAfterOne, 13);
+    expect(afterOne.ship.angularVelocity).toBeCloseTo(expectedOmegaAfterOne, 13);
+
+    let state = afterOne;
+    for (let tick = 1; tick < 120; tick += 1) {
+      state = simulation.step(noThrusters);
+    }
+    expect(state.ship.velocity.x).toBeCloseTo(
+      20 / (1 + sim.LINEAR_DRAG * sim.FIXED_DT) ** 120,
+      12,
+    );
+    expect(state.ship.angularVelocity).toBeCloseTo(
+      2 / (1 + sim.ANGULAR_DRAG * sim.FIXED_DT) ** 120,
+      12,
+    );
+  });
+
+  it("loses at least 25 percent of 20 m/s after one second without thrust", () => {
+    const simulation = damageFreeSimulation({
+      position: { x: 0, y: 60 },
+      velocity: { x: 20, y: 0 },
+    });
+    for (let tick = 0; tick < 120; tick += 1) {
+      simulation.step(noThrusters);
+    }
+
+    const speedAfterOneSecond = Math.abs(simulation.getState().ship.velocity.x);
+    expect(speedAfterOneSecond).toBeLessThanOrEqual(20 * 0.75);
+    expect(speedAfterOneSecond).toBeCloseTo(
+      20 / (1 + sim.LINEAR_DRAG * sim.FIXED_DT) ** 120,
+      12,
+    );
+  });
+
+  it("approaches the drag-limited free-fall and both-thruster climb speeds", () => {
+    const freeFall = damageFreeSimulation();
+    for (let tick = 0; tick < 4800; tick += 1) {
+      freeFall.step(noThrusters);
+    }
+    const terminalFall = freeFall.getState().ship.velocity.y;
+    expect(Math.abs(terminalFall)).toBeLessThanOrEqual(5);
+    expect(terminalFall).toBeCloseTo(-sim.GRAVITY / sim.LINEAR_DRAG, 2);
+    expect(freeFall.getObservation().lateralSpeed).toBeCloseTo(
+      -sim.GRAVITY / sim.LINEAR_DRAG,
+      2,
+    );
+
+    const climb = damageFreeSimulation();
+    for (let tick = 0; tick < 4800; tick += 1) {
+      climb.step(bothThrusters);
+    }
+    const climbAcceleration =
+      (2 * sim.THRUSTER_FORCE * Math.cos(sim.THRUSTER_CANT)) / sim.SHIP_MASS - sim.GRAVITY;
+    const terminalClimb = climb.getState().ship.velocity.y;
+    expect(terminalClimb).toBeGreaterThan(0);
+    expect(terminalClimb).toBeCloseTo(climbAcceleration / sim.LINEAR_DRAG, 2);
+    expect(climb.getObservation().lateralSpeed).toBeCloseTo(
+      climbAcceleration / sim.LINEAR_DRAG,
+      2,
+    );
+  });
+
+  it("keeps progress monotonic through backward movement and scores only whole forward meters", () => {
+    const simulation = createSimulationWithField(createWideTunnelField(), {
+      start: { position: { x: 0, y: 60 }, velocity: { x: 0, y: 0 } },
+    });
+    let maxX = 0;
+    let previousProgress = 0;
+    let sawForwardProgress = false;
+    let movedBackAfterProgress = false;
+    let previousX = 0;
+
+    for (let tick = 0; tick < 1200; tick += 1) {
+      const state = simulation.step(leftThruster);
+      const x = state.ship.position.x;
+      maxX = Math.max(maxX, x);
+      sawForwardProgress ||= state.progress > 0;
+      movedBackAfterProgress ||= sawForwardProgress && x < previousX;
+      expect(state.progress).toBeCloseTo(Math.max(0, maxX), 10);
+      expect(state.progress).toBeGreaterThanOrEqual(previousProgress);
+      expect(state.score).toBe(Math.floor(state.progress));
+      expect("gatesPassed" in state).toBe(false);
+      previousProgress = state.progress;
+      previousX = x;
+    }
+
+    expect(sawForwardProgress).toBe(true);
+    expect(movedBackAfterProgress).toBe(true);
+  });
+
+  it("keeps progress at zero while moving backward from the spawn point", () => {
+    const simulation = createSimulationWithField(createWideTunnelField(), {
+      start: { position: { x: 0, y: 60 }, velocity: { x: -12, y: 0 } },
+    });
+
+    for (let tick = 0; tick < 120; tick += 1) {
+      const state = simulation.step(noThrusters);
+      expect(state.ship.position.x).toBeLessThan(0);
+      expect(state.progress).toBe(0);
+      expect(state.score).toBe(0);
+    }
+  });
+
+  it("replays identical state for the same seed, start, and action sequence", () => {
+    const options = {
+      seed: 314159,
+      start: {
+        position: { x: 25, y: 61 },
+        velocity: { x: 1.25, y: -0.5 },
+        angle: 0.08,
+        angularVelocity: -0.02,
+      },
+    };
     const first = sim.createSimulation(options);
     const second = sim.createSimulation(options);
-    const relevantChunk = field.getChunk(
-      Math.floor(start.position!.x / sim.FIELD_CHUNK_SIZE),
-      Math.floor(start.position!.y / sim.FIELD_CHUNK_SIZE),
-    );
-    const sameSeedChunk = sim.createField(seed).getChunk(
-      relevantChunk.coord.x,
-      relevantChunk.coord.y,
-    );
-    const actions: Action[] = [
-      noThrusters,
-      { left: true, right: false },
-      bothThrusters,
-      { left: false, right: true },
-      noThrusters,
-    ];
+    const actions = [noThrusters, leftThruster, bothThrusters, rightThruster, noThrusters];
 
-    expect(first.field.getChunk(relevantChunk.coord.x, relevantChunk.coord.y)).toEqual(
-      sameSeedChunk,
-    );
-    for (const action of actions) {
-      expect(first.step(action)).toEqual(second.step(action));
+    for (let repeat = 0; repeat < 12; repeat += 1) {
+      for (const action of actions) {
+        expect(first.step(action)).toEqual(second.step(action));
+      }
     }
-    expect(first.getState().hull).toBeLessThan(sim.INITIAL_HULL);
   });
 
-  it("reset(seed) changes the generated field and restores the configured initial state", () => {
+  it("reset(seed) regenerates the tunnel and restores the configured initial state", () => {
     const options = {
       seed: 17,
       hull: 76,
@@ -265,39 +318,31 @@ describe("Starship fixed-step simulation", () => {
     };
     const simulation = sim.createSimulation(options);
     const oldField = simulation.field;
-    const sampleCoordinates = [
-      { x: -5, y: 4 },
-      { x: 3, y: 3 },
-      { x: 4, y: 4 },
-      { x: 7, y: 9 },
-    ];
-    const oldGeometry = sampleCoordinates.map(({ x, y }) => oldField.getChunk(x, y));
+    const oldGeometry = [128, 256, 512, 1024].map((x) => oldField.tunnel.centerAt(x));
     const expected = sim.createSimulation({ ...options, seed: 29 }).getState();
 
     simulation.step(noThrusters);
-    simulation.step({ left: true, right: false });
+    simulation.step(leftThruster);
     expect(simulation.reset(29)).toEqual(expected);
     expect(simulation.field.seed).toBe(29);
     expect(simulation.field).not.toBe(oldField);
-    expect(
-      sampleCoordinates.map(({ x, y }) => simulation.field.getChunk(x, y)),
-    ).not.toEqual(oldGeometry);
+    expect([128, 256, 512, 1024].map((x) => simulation.field.tunnel.centerAt(x)))
+      .not.toEqual(oldGeometry);
   });
 
-  it("reset() reuses the current seed and clears run progress and state", () => {
+  it("reset() reuses the current seed and restores the full initial run", () => {
     const simulation = sim.createSimulation({ seed: 27, hull: 64 });
     simulation.step(bothThrusters);
     simulation.reset(38);
-    simulation.step({ left: true, right: false });
+    simulation.step(leftThruster);
 
     const resetState = simulation.reset();
     const freshState = sim.createSimulation({ seed: 38, hull: 64 }).getState();
-
     expect(resetState).toEqual(freshState);
     expect(simulation.field.seed).toBe(38);
   });
 
-  it("keeps an injected field pinned and ignores reset seeds", () => {
+  it("pins an injected Field and ignores both initial and reset seed overrides", () => {
     const pinnedField = createControlledField({ seed: 52 });
     const simulation = sim.createSimulation({ seed: 99, field: pinnedField, hull: 68 });
     simulation.step(bothThrusters);
@@ -317,7 +362,7 @@ describe("Starship fixed-step simulation", () => {
     });
   });
 
-  it("honors the hull option and all ship start overrides", () => {
+  it("honors the hull option and every ship start override", () => {
     const state = sim.createSimulation({
       hull: 73,
       start: {

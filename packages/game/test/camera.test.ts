@@ -24,7 +24,6 @@ function makeState(
     outcome: "flying",
     score: 0,
     progress: 0,
-    gatesPassed: 0,
   };
 }
 

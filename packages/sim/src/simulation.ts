@@ -1,19 +1,19 @@
 import {
+  ANGULAR_DRAG,
   DAMAGE_SCALE,
   DAMAGE_SPEED_THRESHOLD,
+  DEFAULT_SEED,
   FIXED_DT,
-  GATE_BONUS,
   GRAVITY,
   INITIAL_HULL,
   INVULNERABILITY_SECONDS,
+  LINEAR_DRAG,
   SHIP_INERTIA,
   SHIP_MASS,
   START_POSITION,
 } from "./constants";
 import {
   advanceWithCollisions,
-  findGateCrossings,
-  nearestGateObservation,
   nearestWallDistance,
 } from "./collision";
 import { createField } from "./field";
@@ -32,7 +32,6 @@ import type {
   Vec2,
 } from "./types";
 
-const DEFAULT_SEED = 1;
 const INVULNERABILITY_TICKS = Math.round(INVULNERABILITY_SECONDS / FIXED_DT);
 
 interface Current {
@@ -43,8 +42,6 @@ interface Current {
   thrusters: Action;
   outcome: RunOutcome;
   progress: number;
-  gatesPassed: number;
-  passedGateIds: ReadonlySet<string>;
 }
 
 function copyVec(vector: Vec2): Vec2 {
@@ -74,9 +71,11 @@ function initialCurrent(body: ShipState, hull: number): Current {
     thrusters: { left: false, right: false },
     outcome: hull <= 0 ? "destroyed" : "flying",
     progress: 0,
-    gatesPassed: 0,
-    passedGateIds: new Set<string>(),
   };
+}
+
+function scoreFor(progress: number): number {
+  return Math.floor(progress);
 }
 
 function toSimState(current: Current, seed: number): SimState {
@@ -97,46 +96,50 @@ function toSimState(current: Current, seed: number): SimState {
       right: current.thrusters.right,
     },
     outcome: current.outcome,
-    score: Math.floor(current.progress) + current.gatesPassed * GATE_BONUS,
+    score: scoreFor(current.progress),
     progress: current.progress,
-    gatesPassed: current.gatesPassed,
   };
 }
 
 export function createSimulation(options: SimulationOptions = {}): Simulation {
   const pinnedField = options.field;
-  let activeField: Field = pinnedField ?? createField(options.seed ?? DEFAULT_SEED);
+  let activeField: Field =
+    pinnedField ?? createField(options.seed ?? DEFAULT_SEED);
 
   const bodyTemplate = initialBody(options.start);
   const hullTemplate = options.hull ?? INITIAL_HULL;
-  const spawnPosition = copyVec(bodyTemplate.position);
+  const spawnX = bodyTemplate.position.x;
   let current = initialCurrent(bodyTemplate, hullTemplate);
 
   const getState = (): SimState => toSimState(current, activeField.seed);
 
   const getObservation = (): Observation => {
-    const gateObservation = nearestGateObservation(
-      activeField,
-      current.body.position,
-      current.passedGateIds,
-    );
+    const { position, velocity } = current.body;
+    const center = activeField.tunnel.centerAt(position.x);
+    const heading = activeField.tunnel.headingAt(position.x);
+    const tangent = { x: Math.cos(heading), y: Math.sin(heading) };
+    const normal = { x: -Math.sin(heading), y: Math.cos(heading) };
+
     return {
-      x: current.body.position.x,
-      y: current.body.position.y,
-      vx: current.body.velocity.x,
-      vy: current.body.velocity.y,
+      x: position.x,
+      y: position.y,
+      vx: velocity.x,
+      vy: velocity.y,
       angle: current.body.angle,
       angularVelocity: current.body.angularVelocity,
       hull: current.hull,
       progress: current.progress,
-      score: Math.floor(current.progress) + current.gatesPassed * GATE_BONUS,
+      score: scoreFor(current.progress),
       nearestWallDistance: nearestWallDistance(
         activeField,
-        current.body.position,
+        position,
         current.body.angle,
       ),
-      nearestGateDistance: gateObservation.distance,
-      nearestGateAngle: gateObservation.angle,
+      tunnelCenterOffset: position.y - center.y,
+      tunnelHalfWidth: activeField.tunnel.halfWidth,
+      tunnelHeading: heading,
+      forwardSpeed: velocity.x * tangent.x + velocity.y * tangent.y,
+      lateralSpeed: velocity.x * normal.x + velocity.y * normal.y,
     };
   };
 
@@ -152,17 +155,22 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       }
 
       const effect = thrusterEffect(current.body.angle, action);
+      const linearDamping = 1 + LINEAR_DRAG * FIXED_DT;
+      const angularDamping = 1 + ANGULAR_DRAG * FIXED_DT;
       const velocity: Vec2 = {
-        x: current.body.velocity.x + (effect.force.x / SHIP_MASS) * FIXED_DT,
+        x:
+          (current.body.velocity.x + (effect.force.x / SHIP_MASS) * FIXED_DT) /
+          linearDamping,
         y:
-          current.body.velocity.y +
-          (effect.force.y / SHIP_MASS - GRAVITY) * FIXED_DT,
+          (current.body.velocity.y +
+            (effect.force.y / SHIP_MASS - GRAVITY) * FIXED_DT) /
+          linearDamping,
       };
       const angularVelocity =
-        current.body.angularVelocity +
-        (effect.torque / SHIP_INERTIA) * FIXED_DT;
+        (current.body.angularVelocity +
+          (effect.torque / SHIP_INERTIA) * FIXED_DT) /
+        angularDamping;
 
-      const previousPosition = copyVec(current.body.position);
       const advanced = advanceWithCollisions(
         activeField,
         current.body.position,
@@ -193,29 +201,10 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         invulnerableTicksRemaining = INVULNERABILITY_TICKS;
       }
 
-      const crossedGates = findGateCrossings(
-        activeField,
-        previousPosition,
-        advanced.position,
-        current.passedGateIds,
-        advanced.collidedGateIds,
+      const progress = Math.max(
+        current.progress,
+        Math.max(0, advanced.position.x - spawnX),
       );
-      let passedGateIds = current.passedGateIds;
-      let gatesPassed = current.gatesPassed;
-      if (crossedGates.length > 0) {
-        const nextPassed = new Set(current.passedGateIds);
-        for (const gate of crossedGates) {
-          nextPassed.add(gate.id);
-        }
-        passedGateIds = nextPassed;
-        gatesPassed += crossedGates.length;
-      }
-
-      const distanceFromSpawn = Math.hypot(
-        advanced.position.x - spawnPosition.x,
-        advanced.position.y - spawnPosition.y,
-      );
-      const progress = Math.max(current.progress, distanceFromSpawn);
 
       current = {
         tick: current.tick + 1,
@@ -230,8 +219,6 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         thrusters: { left: action.left, right: action.right },
         outcome: hull <= 0 ? "destroyed" : "flying",
         progress,
-        gatesPassed,
-        passedGateIds,
       };
 
       return getState();

@@ -1,188 +1,190 @@
 import { describe, expect, it } from "vitest";
-import type { FieldChunk, Vec2 } from "../src/index";
+import type { Field, FieldChunk, Vec2 } from "../src/index";
 import { sim } from "./helpers";
 
-function pointToSegmentDistance(point: Vec2, start: Vec2, end: Vec2): number {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const lengthSquared = dx * dx + dy * dy;
-  const t =
-    lengthSquared === 0
-      ? 0
-      : Math.max(
-          0,
-          Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared),
-        );
-  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+interface WallSegment {
+  chunk: FieldChunk;
+  wallId: string;
+  start: Vec2;
+  end: Vec2;
 }
 
-function circleIntersectsChunk(center: Vec2, radius: number, cx: number, cy: number): boolean {
-  const size = sim.FIELD_CHUNK_SIZE;
-  const left = cx * size;
-  const bottom = cy * size;
-  const closestX = Math.max(left, Math.min(center.x, left + size));
-  const closestY = Math.max(bottom, Math.min(center.y, bottom + size));
-  return (center.x - closestX) ** 2 + (center.y - closestY) ** 2 <= radius ** 2;
-}
-
-function expectedViewCoords(center: Vec2, radius: number): Vec2[] {
-  const size = sim.FIELD_CHUNK_SIZE;
-  const minCx = Math.floor((center.x - radius) / size) - 1;
-  const maxCx = Math.floor((center.x + radius) / size) + 1;
-  const minCy = Math.floor((center.y - radius) / size) - 1;
-  const maxCy = Math.floor((center.y + radius) / size) + 1;
-  const coords: Vec2[] = [];
-  for (let cy = minCy; cy <= maxCy; cy += 1) {
-    for (let cx = minCx; cx <= maxCx; cx += 1) {
-      if (circleIntersectsChunk(center, radius, cx, cy)) {
-        coords.push({ x: cx, y: cy });
+function collectWallSegments(
+  field: Field,
+  cxRange: readonly [number, number],
+  cyRange: readonly [number, number],
+): WallSegment[] {
+  const result: WallSegment[] = [];
+  for (let cy = cyRange[0]; cy <= cyRange[1]; cy += 1) {
+    for (let cx = cxRange[0]; cx <= cxRange[1]; cx += 1) {
+      const chunk = field.getChunk(cx, cy);
+      for (const wall of chunk.walls) {
+        for (let index = 0; index + 1 < wall.points.length; index += 1) {
+          result.push({
+            chunk,
+            wallId: wall.id,
+            start: wall.points[index]!,
+            end: wall.points[index + 1]!,
+          });
+        }
       }
     }
   }
-  return coords.sort((a, b) => a.y - b.y || a.x - b.x);
+  return result;
 }
 
-function expectGeneratedChunkShape(chunk: FieldChunk) {
-  const { x: cx, y: cy } = chunk.coord;
-  const left = cx * sim.FIELD_CHUNK_SIZE;
-  const right = (cx + 1) * sim.FIELD_CHUNK_SIZE;
-  const bottom = cy * sim.FIELD_CHUNK_SIZE;
-  const top = (cy + 1) * sim.FIELD_CHUNK_SIZE;
-
-  expect(chunk.walls.length).toBeGreaterThanOrEqual(1);
-  expect(chunk.walls.length).toBeLessThanOrEqual(2);
-  for (const wall of chunk.walls) {
-    expect(wall.points.length).toBeGreaterThanOrEqual(5);
-    expect(wall.points.length).toBeLessThanOrEqual(9);
-    for (const point of wall.points) {
-      expect(point.x).toBeGreaterThanOrEqual(left);
-      expect(point.x).toBeLessThanOrEqual(right);
-      expect(point.y).toBeGreaterThanOrEqual(bottom);
-      expect(point.y).toBeLessThanOrEqual(top);
-      expect(point.y).toBeGreaterThan(sim.GROUND_Y);
-    }
-  }
-
-  expect(chunk.gates.length).toBeLessThanOrEqual(1);
-  for (const gate of chunk.gates) {
-    expect(gate.radius).toBeGreaterThanOrEqual(sim.GATE_MIN_RADIUS);
-    expect(gate.radius).toBeLessThanOrEqual(sim.GATE_MAX_RADIUS);
-    expect(Math.hypot(gate.normal.x, gate.normal.y)).toBeCloseTo(1, 12);
-    expect(gate.center.x).toBeGreaterThanOrEqual(left);
-    expect(gate.center.x).toBeLessThanOrEqual(right);
-    expect(gate.center.y).toBeGreaterThanOrEqual(bottom);
-    expect(gate.center.y).toBeLessThanOrEqual(top);
-
-    for (const wall of chunk.walls) {
-      for (let index = 0; index + 1 < wall.points.length; index += 1) {
-        const centerToSegment = pointToSegmentDistance(
-          gate.center,
-          wall.points[index]!,
-          wall.points[index + 1]!,
-        );
-        expect(centerToSegment - gate.radius).toBeGreaterThanOrEqual(10);
-      }
-    }
-  }
+function chunkOrder(a: FieldChunk, b: FieldChunk): number {
+  return a.coord.y - b.coord.y || a.coord.x - b.coord.x;
 }
 
-describe("deterministic endless field", () => {
-  it("exports the documented field constants and creates a seeded Field", () => {
-    expect(sim.GROUND_Y).toBe(0);
-    expect(sim.FIELD_CHUNK_SIZE).toBe(80);
-
+describe("seeded endless tunnel field", () => {
+  it("exposes the frozen tunnel contract and default field constants", () => {
     const field = sim.createField(41);
+
+    expect(sim.FIELD_CHUNK_SIZE).toBe(80);
+    expect(sim.TUNNEL_HALF_WIDTH).toBe(34);
+    expect(sim.TUNNEL_CENTER_Y).toBe(60);
+    expect(sim.TUNNEL_START_STRAIGHT).toBe(120);
+    expect(sim.TUNNEL_BEND_AMPLITUDE).toBe(24);
+    expect(sim.TUNNEL_MAX_SLOPE).toBe(0.35);
+    expect(sim.TUNNEL_SAMPLE_STEP).toBe(8);
     expect(field.seed).toBe(41);
-    expect(field.chunkSize).toBe(80);
-    expect(field.groundY).toBe(0);
+    expect(field.chunkSize).toBe(sim.FIELD_CHUNK_SIZE);
+    expect(field.tunnel.halfWidth).toBe(sim.TUNNEL_HALF_WIDTH);
+    expect(typeof field.tunnel.centerAt).toBe("function");
+    expect(typeof field.tunnel.headingAt).toBe("function");
     expect(typeof field.getChunk).toBe("function");
     expect(typeof field.chunksInView).toBe("function");
   });
 
-  it("generates identical chunks independent of generation and call order", () => {
-    const coordinates = [
-      { x: -5, y: 4 },
-      { x: 3, y: 3 },
-      { x: 5, y: 7 },
-      { x: 2, y: 9 },
-    ];
-    const first = sim.createField(1234);
-    const second = sim.createField(1234);
-    const firstResults = coordinates.map(({ x, y }) => first.getChunk(x, y));
-    const reverseResults = [...coordinates]
-      .reverse()
-      .map(({ x, y }) => second.getChunk(x, y))
-      .reverse();
+  it("keeps the centerline straight at y=60 through x=120, including negative x", () => {
+    const field = sim.createField(314159);
 
-    expect(firstResults).toEqual(reverseResults);
+    for (const x of [-10000, -120, -8, 0, 80, 119.999, 120]) {
+      expect(field.tunnel.centerAt(x)).toEqual({ x, y: 60 });
+      expect(field.tunnel.headingAt(x)).toBe(0);
+    }
   });
 
-  it("changes generated geometry for a different seed", () => {
-    const coordinates = [
-      { x: -5, y: 4 },
-      { x: 3, y: 3 },
-      { x: 5, y: 7 },
-      { x: 2, y: 9 },
-    ];
+  it("bounds the seeded bends by 24 m and atan(0.35) heading", () => {
+    const field = sim.createField(2026);
+    const maximumHeading = Math.atan(sim.TUNNEL_MAX_SLOPE);
+
+    for (let x = sim.TUNNEL_START_STRAIGHT; x <= 20_000; x += 4) {
+      const center = field.tunnel.centerAt(x);
+      const heading = field.tunnel.headingAt(x);
+      expect(Math.abs(center.y - sim.TUNNEL_CENTER_Y)).toBeLessThanOrEqual(
+        sim.TUNNEL_BEND_AMPLITUDE,
+      );
+      expect(Math.abs(heading)).toBeLessThanOrEqual(maximumHeading);
+      expect(Number.isFinite(center.x) && Number.isFinite(center.y)).toBe(true);
+      expect(Number.isFinite(heading)).toBe(true);
+    }
+  });
+
+  it("repeats exactly for the same seed and changes bends for a different seed", () => {
     const first = sim.createField(1234);
-    const second = sim.createField(5678);
+    const sameSeed = sim.createField(1234);
+    const differentSeed = sim.createField(5678);
+    const xCoordinates = [120, 128, 256, 512, 1024, 2048, 4096];
 
     expect(
-      coordinates.map(({ x, y }) => first.getChunk(x, y)),
-    ).not.toEqual(coordinates.map(({ x, y }) => second.getChunk(x, y)));
+      xCoordinates.map((x) => [first.tunnel.centerAt(x), first.tunnel.headingAt(x)]),
+    ).toEqual(
+      xCoordinates.map((x) => [sameSeed.tunnel.centerAt(x), sameSeed.tunnel.headingAt(x)]),
+    );
+    expect(
+      xCoordinates.slice(1).map((x) => first.tunnel.centerAt(x).y),
+    ).not.toEqual(xCoordinates.slice(1).map((x) => differentSeed.tunnel.centerAt(x).y));
+
+    for (const [cx, cy] of [[-5, 0], [-2, 1], [0, 0], [3, 1], [8, 0]]) {
+      expect(first.getChunk(cx!, cy!)).toEqual(sameSeed.getChunk(cx!, cy!));
+    }
   });
 
-  it("supports negative chunk coordinates and keeps geometry inside each chunk", () => {
-    const field = sim.createField(314159);
-    const chunk = field.getChunk(-4, 5);
-
-    expect(chunk.coord).toEqual({ x: -4, y: 5 });
-    expectGeneratedChunkShape(chunk);
-    expect(chunk.walls.some((wall) => wall.points.some((point) => point.x < 0))).toBe(true);
-  });
-
-  it("leaves chunks entirely below ground and intersecting safe spawn empty", () => {
+  it("samples top and bottom walls every 8 m and keeps every segment in its owning chunk", () => {
     const field = sim.createField(91);
+    const segments = collectWallSegments(field, [-4, 4], [-2, 3]);
+    const segmentKeys = new Set<string>();
 
-    for (const [cx, cy] of [
-      [3, -1],
-      [-4, -2],
-      [0, 0],
-      [1, 1],
-      [-2, 1],
-    ]) {
-      expect(field.getChunk(cx!, cy!)).toEqual({
-        coord: { x: cx, y: cy },
-        walls: [],
-        gates: [],
-      });
+    expect(segments.length).toBeGreaterThan(0);
+    for (const { chunk, start, end } of segments) {
+      expect(Math.abs(end.x - start.x)).toBe(sim.TUNNEL_SAMPLE_STEP);
+      const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+      expect(Math.floor(midpoint.x / field.chunkSize)).toBe(chunk.coord.x);
+      expect(Math.floor(midpoint.y / field.chunkSize)).toBe(chunk.coord.y);
+
+      const startCenter = field.tunnel.centerAt(start.x);
+      const endCenter = field.tunnel.centerAt(end.x);
+      const startOffset = start.y - startCenter.y;
+      const endOffset = end.y - endCenter.y;
+      const expectedSide = startOffset < 0 ? -sim.TUNNEL_HALF_WIDTH : sim.TUNNEL_HALF_WIDTH;
+      expect(startOffset).toBe(expectedSide);
+      expect(endOffset).toBe(expectedSide);
+
+      const key = `${start.x}:${start.y}:${end.x}:${end.y}`;
+      expect(segmentKeys.has(key)).toBe(false);
+      segmentKeys.add(key);
     }
   });
 
-  it("generates 1-2 valid walls and at most one clear gate in ordinary chunks", () => {
-    const field = sim.createField(2026);
+  it("joins sampled wall endpoints across positive and negative chunk seams", () => {
+    const field = sim.createField(7001);
+    const segments = collectWallSegments(field, [-3, 3], [-2, 3]);
 
-    for (const [cx, cy] of [
-      [3, 3],
-      [5, 4],
-      [-4, 5],
-    ]) {
+    for (const seamX of [-160, -80, 0, 80, 160]) {
+      for (const side of [-1, 1]) {
+        const incoming = segments.find(
+          ({ start, end }) => start.x === seamX - sim.TUNNEL_SAMPLE_STEP && end.x === seamX &&
+            Math.sign((start.y + end.y) / 2 - sim.TUNNEL_CENTER_Y) === side,
+        );
+        const outgoing = segments.find(
+          ({ start, end }) => start.x === seamX && end.x === seamX + sim.TUNNEL_SAMPLE_STEP &&
+            Math.sign((start.y + end.y) / 2 - sim.TUNNEL_CENTER_Y) === side,
+        );
+        expect(incoming).toBeDefined();
+        expect(outgoing).toBeDefined();
+        expect(incoming!.end).toEqual(outgoing!.start);
+      }
+    }
+  });
+
+  it("supports negative chunks and deterministically assigns each wall segment once", () => {
+    const first = sim.createField(314159);
+    const second = sim.createField(314159);
+    const chunks = collectWallSegments(first, [-5, 2], [-2, 3]);
+    const keys = chunks.map(({ start, end }) => `${start.x}:${start.y}:${end.x}:${end.y}`);
+
+    expect(first.getChunk(-3, 0).coord).toEqual({ x: -3, y: 0 });
+    expect(chunks.some(({ start, end }) => start.x < 0 && end.x <= 0)).toBe(true);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const { chunk } of chunks) {
+      expect(first.getChunk(chunk.coord.x, chunk.coord.y)).toEqual(
+        second.getChunk(chunk.coord.x, chunk.coord.y),
+      );
+    }
+  });
+
+  it("contains only tunnel walls, with no gates or ground metadata", () => {
+    const field = sim.createField(77);
+
+    for (const [cx, cy] of [[-4, -2], [-1, 0], [0, 1], [2, 0], [5, 2]]) {
       const chunk = field.getChunk(cx!, cy!);
-      expect(chunk.coord).toEqual({ x: cx, y: cy });
-      expectGeneratedChunkShape(chunk);
+      expect(Object.keys(chunk).sort()).toEqual(["coord", "walls"]);
+      expect("gates" in chunk).toBe(false);
+      expect("groundY" in field).toBe(false);
     }
   });
 
-  it("returns every intersecting view chunk once in deterministic cy/cx order", () => {
+  it("returns chunks in deterministic cy-then-cx order without duplicates", () => {
     const field = sim.createField(2026);
     const center = { x: -20, y: 95 };
-    const radius = 120;
-    const chunks = field.chunksInView(center, radius);
-    const coords = chunks.map((chunk) => chunk.coord);
-    const expected = expectedViewCoords(center, radius);
+    const chunks = field.chunksInView(center, 120);
+    const coordinates = chunks.map(({ coord }) => `${coord.x},${coord.y}`);
 
-    expect(coords).toEqual(expected);
-    expect(new Set(coords.map(({ x, y }) => `${x},${y}`)).size).toBe(coords.length);
-    expect(field.chunksInView(center, radius)).toEqual(chunks);
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks).toEqual([...chunks].sort(chunkOrder));
+    expect(new Set(coordinates).size).toBe(coordinates.length);
+    expect(field.chunksInView(center, 120)).toEqual(chunks);
   });
 });
