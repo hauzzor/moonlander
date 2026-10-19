@@ -11,26 +11,26 @@ test("page loads without uncaught page errors or console errors", async ({ page 
     }
   });
 
-  await page.goto("/");
+  await page.goto("./");
 
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });
 
 test("browser title contains Moonlander", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("./");
 
   await expect(page).toHaveTitle(/Moonlander/);
 });
 
 test("an accessible Moonlander heading is visible", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("./");
 
   await expect(page.getByRole("heading", { name: "Moonlander", exact: true })).toBeVisible();
 });
 
 test("the game canvas is visible with non-zero rendered size", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("./");
 
   const canvas = page.getByTestId("game-canvas");
   await expect(canvas).toBeVisible();

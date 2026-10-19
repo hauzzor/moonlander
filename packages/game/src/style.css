@@ -1,0 +1,46 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #080a14;
+  color: #e8eaf6;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: 0.5rem 1rem;
+  background: #101321;
+  border-bottom: 1px solid #2a2d3a;
+  flex: 0 0 auto;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+canvas {
+  flex: 1 1 auto;
+  display: block;
+  width: 100%;
+  min-height: 200px;
+  background: #080a14;
+}
