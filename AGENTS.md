@@ -43,6 +43,7 @@ script execution is disabled.
 - Build: `npm.cmd run build`
 - Browser tests: `npm.cmd run test:e2e`
 - Live browser smoke test: `npm.cmd run test:e2e:live`
+- Delivery: `npm.cmd run deliver -- --message "..."`
 
 ## Change intake interview
 
@@ -116,14 +117,19 @@ it as a separate red/green cycle.
 
 ## Delivery after every build
 
-After every successful production build, the lead must:
+After every successful production build, the lead must run:
 
-1. Inspect `git status` and `git diff` and stage only the intended changes.
-2. Commit the green build with a concise message matching the repository style.
-3. Push the commit to `origin/main`.
-4. Wait for the GitHub Pages deployment and run the live Playwright suite
-   (`npm.cmd run test:e2e:live`) or verify the equivalent CI smoke job.
-5. Report the deployment result.
+```powershell
+npm.cmd run deliver -- --message "feat: ..."
+```
+
+The script verifies the build, commits the intended changes, pushes to
+`origin/main`, waits for the live asset, runs the live Playwright suite, and
+reports the result. Use `--dry-run` first, `--stage-all` only when every
+working-tree change is intended, and `--help` for the full flag list. The manual
+fallback remains: inspect `git status`/`git diff`, stage only intended changes,
+commit, push, wait for the GitHub Pages deployment, and run
+`npm.cmd run test:e2e:live`.
 
 Do not commit or push a failing build. If the user explicitly waives delivery
 for a specific build, record the waiver in the change brief. This rule applies

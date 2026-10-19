@@ -68,5 +68,10 @@ production build. Every push to `main` runs the same checks, deploys the built
 site to GitHub Pages, and then runs the full Playwright suite against the live
 deployment.
 
+`npm.cmd run deliver -- --message "feat: ..."` verifies the build, commits the
+staged changes, pushes to `origin/main`, waits for the new live asset, and runs
+the live Playwright suite. Use `--dry-run` first and `--stage-all` only when
+every working-tree change is intended. See `node scripts/deliver.mjs --help`.
+
 `npm.cmd run test:e2e:live` runs the browser suite against
 `https://hauzzor.github.io/moonlander/` by default.
