@@ -22,7 +22,7 @@
     "typecheck:sim": "tsc -p packages/sim/tsconfig.json --noEmit",
     "typecheck:game": "tsc -p packages/game/tsconfig.json --noEmit",
     "typecheck:root": "tsc -p tsconfig.json --noEmit",
-    "verify": "npm run typecheck && npm test -- --passWithNoTests && npm run test:e2e && npm run build",
+    "verify": "npm run typecheck && npm test && npm run test:e2e && npm run build",
     "sim:demo": "tsx packages/sim/examples/headless-demo.ts"
   },
   "devDependencies": {

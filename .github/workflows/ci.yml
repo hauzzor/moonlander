@@ -36,7 +36,7 @@ jobs:
         run: npm run typecheck
 
       - name: Unit tests
-        run: npm test -- --passWithNoTests
+        run: npm test
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
