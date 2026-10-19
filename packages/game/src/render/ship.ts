@@ -1,0 +1,215 @@
+import { THRUSTER_CANT, type SimState } from "@moonlander/sim";
+import {
+  worldToScreen,
+  type Camera,
+  type Viewport,
+} from "../camera";
+
+function drawFlame(
+  ctx: CanvasRenderingContext2D,
+  mountX: number,
+  side: number,
+  state: SimState,
+): void {
+  const flicker =
+    0.86 +
+    0.1 * Math.sin(state.time * 53 + (side > 0 ? 1.7 : 0.2)) +
+    0.04 * Math.sin(state.time * 91 + side);
+  const length = 12 + flicker * 6;
+  const halfWidth = 3.5;
+  const baseY = 9.4;
+  const directionX = side * Math.sin(THRUSTER_CANT);
+  const directionY = Math.cos(THRUSTER_CANT);
+  const tipX = mountX + directionX * length;
+  const tipY = baseY + directionY * length;
+  const perpendicularX = -directionY;
+  const perpendicularY = directionX;
+
+  ctx.save();
+  const glow = ctx.createRadialGradient(mountX, baseY, 0, mountX, baseY, 8);
+  glow.addColorStop(0, "rgba(255, 230, 150, 0.6)");
+  glow.addColorStop(0.45, "rgba(255, 145, 42, 0.22)");
+  glow.addColorStop(1, "rgba(255, 100, 0, 0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(mountX, baseY, 8, 0, Math.PI * 2);
+  ctx.fill();
+
+  const outer = ctx.createLinearGradient(mountX, baseY, tipX, tipY);
+  outer.addColorStop(0, "rgba(255, 247, 197, 0.96)");
+  outer.addColorStop(0.35, "rgba(255, 178, 62, 0.9)");
+  outer.addColorStop(1, "rgba(255, 79, 16, 0)");
+  ctx.fillStyle = outer;
+  ctx.beginPath();
+  ctx.moveTo(
+    mountX + perpendicularX * halfWidth,
+    baseY + perpendicularY * halfWidth,
+  );
+  ctx.quadraticCurveTo(
+    tipX - perpendicularX * halfWidth * 0.2,
+    tipY - perpendicularY * halfWidth * 0.2,
+    tipX,
+    tipY,
+  );
+  ctx.quadraticCurveTo(
+    tipX + perpendicularX * halfWidth * 0.2,
+    tipY + perpendicularY * halfWidth * 0.2,
+    mountX - perpendicularX * halfWidth,
+    baseY - perpendicularY * halfWidth,
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  const innerLength = length * 0.5;
+  const innerTipX = mountX + directionX * innerLength;
+  const innerTipY = baseY + directionY * innerLength;
+  ctx.fillStyle = "rgba(236, 253, 255, 0.94)";
+  ctx.beginPath();
+  ctx.moveTo(
+    mountX + perpendicularX * halfWidth * 0.34,
+    baseY + perpendicularY * halfWidth * 0.34,
+  );
+  ctx.lineTo(innerTipX, innerTipY);
+  ctx.lineTo(
+    mountX - perpendicularX * halfWidth * 0.34,
+    baseY - perpendicularY * halfWidth * 0.34,
+  );
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+export function drawStarship(
+  ctx: CanvasRenderingContext2D,
+  viewport: Viewport,
+  camera: Camera,
+  state: SimState,
+): void {
+  const center = worldToScreen(
+    viewport,
+    camera,
+    state.ship.position.x,
+    state.ship.position.y,
+  );
+  const destroyed = state.outcome === "destroyed";
+
+  ctx.save();
+  ctx.translate(center.x, center.y);
+  ctx.rotate(-state.ship.angle);
+  ctx.scale(viewport.scale, viewport.scale);
+
+  if (!destroyed && state.thrusters.left) {
+    drawFlame(ctx, -16, -1, state);
+  }
+  if (!destroyed && state.thrusters.right) {
+    drawFlame(ctx, 16, 1, state);
+  }
+
+  ctx.fillStyle = "#39445c";
+  ctx.strokeStyle = "rgba(168, 190, 224, 0.45)";
+  ctx.lineWidth = 0.45;
+  ctx.beginPath();
+  ctx.moveTo(-17, -7);
+  ctx.lineTo(-24, -13);
+  ctx.lineTo(-22, -5.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  const hullGradient = ctx.createLinearGradient(0, -9.5, 0, 8.5);
+  hullGradient.addColorStop(0, destroyed ? "#9aa4b4" : "#eef4ff");
+  hullGradient.addColorStop(0.42, destroyed ? "#606b7c" : "#b7c7e4");
+  hullGradient.addColorStop(1, destroyed ? "#303746" : "#687b9e");
+  ctx.fillStyle = hullGradient;
+  ctx.strokeStyle = destroyed ? "#6d7687" : "#dbe9ff";
+  ctx.lineWidth = 0.55;
+  ctx.beginPath();
+  ctx.moveTo(24, 0);
+  ctx.lineTo(11, -6.8);
+  ctx.lineTo(-7, -9);
+  ctx.lineTo(-20, -7.3);
+  ctx.lineTo(-24, -3.2);
+  ctx.lineTo(-24, 2.6);
+  ctx.lineTo(-18, 6.6);
+  ctx.lineTo(-6, 8.4);
+  ctx.lineTo(8, 6.6);
+  ctx.lineTo(18, 3.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = destroyed
+    ? "rgba(67, 45, 45, 0.4)"
+    : "rgba(33, 61, 87, 0.58)";
+  ctx.strokeStyle = destroyed ? "#7e5a5a" : "#6fd7ff";
+  ctx.lineWidth = 0.35;
+  ctx.beginPath();
+  ctx.moveTo(15, -1.4);
+  ctx.quadraticCurveTo(12.5, -5.1, 6.2, -5.4);
+  ctx.lineTo(3.2, -3.6);
+  ctx.quadraticCurveTo(7.5, -0.2, 15, -1.4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  const accent = ctx.createLinearGradient(-20, 0, 22, 0);
+  accent.addColorStop(0, "rgba(91, 205, 255, 0.2)");
+  accent.addColorStop(0.5, "rgba(115, 226, 255, 0.95)");
+  accent.addColorStop(1, "rgba(79, 195, 247, 0.35)");
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 0.38;
+  ctx.beginPath();
+  ctx.moveTo(21.5, 0.8);
+  ctx.lineTo(9, 5.9);
+  ctx.lineTo(-5, 7.6);
+  ctx.lineTo(-19, 6);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(225, 239, 255, 0.28)";
+  ctx.lineWidth = 0.18;
+  ctx.beginPath();
+  ctx.moveTo(-12, -8.2);
+  ctx.lineTo(-12, 7.1);
+  ctx.moveTo(-2, -8.85);
+  ctx.lineTo(-2, 8);
+  ctx.moveTo(8, -7.2);
+  ctx.lineTo(8, 6.4);
+  ctx.stroke();
+
+  for (const side of [-1, 1]) {
+    const mountX = side * 16;
+    ctx.fillStyle = destroyed ? "#343944" : "#303b50";
+    ctx.strokeStyle = destroyed ? "#596170" : "#9bb3d1";
+    ctx.lineWidth = 0.35;
+    ctx.beginPath();
+    ctx.moveTo(mountX - 3.5, 3.4);
+    ctx.lineTo(mountX + 3.5, 3.4);
+    ctx.lineTo(mountX + 2.7, 9);
+    ctx.lineTo(mountX - 2.7, 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = destroyed ? "#242830" : "#121926";
+    ctx.beginPath();
+    ctx.ellipse(mountX, 9.1, 2.5, 1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = destroyed ? "#4c515c" : "rgba(255, 188, 92, 0.75)";
+    ctx.lineWidth = 0.35;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  if (state.invulnerable && !destroyed) {
+    const pulse = 0.35 + 0.22 * Math.sin(state.time * 28);
+    const alpha = Math.min(0.8, Math.max(0, pulse));
+    ctx.save();
+    ctx.strokeStyle = `rgba(104, 223, 255, ${alpha})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 27 * viewport.scale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
