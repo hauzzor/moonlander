@@ -24,6 +24,10 @@ export const FUEL_BURN_RATE = 5;
 export const LEFT_MOUNT: Vec2 = { x: -12, y: -12 };
 export const RIGHT_MOUNT: Vec2 = { x: 12, y: -12 };
 
+export const LEFT_FOOT: Vec2 = { x: -14, y: -16 };
+export const RIGHT_FOOT: Vec2 = { x: 14, y: -16 };
+export const NOSE: Vec2 = { x: 0, y: 14 };
+
 // Rectangular box inertia about the center of mass: m * (w^2 + h^2) / 12.
 export const LANDER_INERTIA =
   (LANDER_MASS * (LANDER_WIDTH ** 2 + LANDER_HEIGHT ** 2)) / 12;

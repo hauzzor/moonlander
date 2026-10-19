@@ -111,6 +111,22 @@ interface SimulationOptions {
   start?: LanderStart;
 }
 
+interface Observation {
+  x: number;
+  altitude: number;
+  vx: number;
+  vy: number;
+  angle: number;
+  angularVelocity: number;
+  fuel: number;
+  padOffsetX: number;
+}
+
+interface Controller {
+  act(observation: Observation): Action;
+  reset?(): void;
+}
+
 interface Simulation {
   getState(): SimState;
   getObservation(): Observation;
@@ -119,6 +135,19 @@ interface Simulation {
   readonly terrain: Terrain;
 }
 ```
+
+Observation semantics:
+
+- `x` is horizontal position in meters.
+- `altitude` is lander center height above the terrain directly below it.
+- `vx` and `vy` are world velocity in m/s.
+- `angle` is in radians and `angularVelocity` in rad/s.
+- `fuel` is remaining fuel units.
+- `padOffsetX` is `padCenterX - x`, positive when the pad is to the right.
+
+All observation fields are finite numbers. The controller only consumes the
+observation and returns an `Action`; the simulation never depends on browser
+input.
 
 Required exports:
 
@@ -210,10 +239,8 @@ the simulation state, never from render-only mutable state.
 - CI runs typecheck, unit tests, browser tests, and production build.
 - A live Playwright smoke test runs against the deployed GitHub Pages URL.
 
-## Milestones
+## Delivery
 
-0. Deployable shell and CI/CD.
-1. Deterministic flight model.
-2. Seeded terrain and landing outcomes.
-3. Playable Canvas game.
-4. Autonomy-ready API, headless example, documentation, and polish.
+The remaining scope is delivered as one combined build: deterministic flight,
+seeded terrain and landing outcomes, the playable Canvas game, and the
+autonomy-ready observation/controller API with a headless example and docs.

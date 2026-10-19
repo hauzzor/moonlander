@@ -1,3 +1,17 @@
+:root {
+  --bg: #080a14;
+  --panel: #101321;
+  --panel-border: #2a2d3a;
+  --text: #e8eaf6;
+  --muted: #8c93a8;
+  --accent: #4fc3f7;
+  --thruster-on: #ffab40;
+  --thruster-off: #4a4f61;
+  --success: #69f0ae;
+  --warning: #ffd740;
+  --danger: #ff5252;
+}
+
 *,
 *::before,
 *::after {
@@ -12,8 +26,8 @@ body,
 }
 
 body {
-  background: #080a14;
-  color: #e8eaf6;
+  background: var(--bg);
+  color: var(--text);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     sans-serif;
 }
@@ -21,12 +35,13 @@ body {
 #app {
   display: flex;
   flex-direction: column;
+  height: 100%;
 }
 
 header {
   padding: 0.5rem 1rem;
-  background: #101321;
-  border-bottom: 1px solid #2a2d3a;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
   flex: 0 0 auto;
 }
 
@@ -37,10 +52,151 @@ h1 {
   letter-spacing: 0.05em;
 }
 
+.game {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hud {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.hud-item {
+  background: rgba(16, 19, 33, 0.85);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  backdrop-filter: blur(2px);
+}
+
+.hud-value {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.thruster {
+  color: var(--text);
+  border-color: var(--thruster-off);
+  transition: border-color 0.1s, color 0.1s, box-shadow 0.1s;
+}
+
+.thruster[data-active="true"] {
+  color: #1a1c29;
+  background: var(--thruster-on);
+  border-color: var(--thruster-on);
+  box-shadow: 0 0 0.5rem rgba(255, 171, 64, 0.5);
+}
+
 canvas {
   flex: 1 1 auto;
   display: block;
   width: 100%;
   min-height: 200px;
-  background: #080a14;
+  background: var(--bg);
+  touch-action: none;
+}
+
+.instructions {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: rgba(16, 19, 33, 0.85);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+}
+
+kbd {
+  display: inline-block;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-family: inherit;
+  font-size: 0.8em;
+  color: var(--accent);
+}
+
+.outcome {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 20, 0.75);
+  backdrop-filter: blur(3px);
+  transition: opacity 0.2s ease;
+}
+
+.outcome.hidden {
+  display: none;
+}
+
+.outcome-text {
+  padding: 1rem 2rem;
+  background: var(--panel);
+  border: 2px solid var(--panel-border);
+  border-radius: 0.75rem;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.outcome.landed .outcome-text {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.outcome.missed-pad .outcome-text {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+
+.outcome.crashed .outcome-text {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+@media (max-width: 600px) {
+  .hud {
+    gap: 0.375rem;
+  }
+
+  .hud-item {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .instructions {
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+  }
+
+  .outcome-text {
+    font-size: 1.5rem;
+  }
 }

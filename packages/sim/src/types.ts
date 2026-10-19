@@ -39,8 +39,39 @@ export interface SimulationOptions {
   start?: LanderStart;
 }
 
+export interface TerrainPad {
+  left: number;
+  right: number;
+  y: number;
+}
+
+export interface Terrain {
+  seed: number;
+  points: readonly Vec2[];
+  pad: TerrainPad;
+  heightAt(x: number): number;
+}
+
+export interface Observation {
+  x: number;
+  altitude: number;
+  vx: number;
+  vy: number;
+  angle: number;
+  angularVelocity: number;
+  fuel: number;
+  padOffsetX: number;
+}
+
+export interface Controller {
+  act(observation: Observation): Action;
+  reset?(): void;
+}
+
 export interface Simulation {
   getState(): SimState;
+  getObservation(): Observation;
   step(action: Action): SimState;
   reset(seed?: number): SimState;
+  readonly terrain: Terrain;
 }

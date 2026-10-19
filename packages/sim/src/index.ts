@@ -1,11 +1,15 @@
 export type {
   Action,
+  Controller,
   LandingOutcome,
   LanderStart,
   LanderState,
+  Observation,
   Simulation,
   SimulationOptions,
   SimState,
+  Terrain,
+  TerrainPad,
   Vec2,
 } from "./types";
 
@@ -19,3 +23,4 @@ export {
 } from "./constants";
 
 export { createSimulation } from "./simulation";
+export { createTerrain } from "./terrain";

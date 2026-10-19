@@ -62,8 +62,8 @@ describe("seeded terrain", () => {
   it("spans 600 units and exposes the exact flat pad and plateau", () => {
     const terrain = createSimulation({ seed: 41 }).terrain;
 
-    expect(terrain.points[0].x).toBe(0);
-    expect(terrain.points[terrain.points.length - 1].x).toBe(WORLD_WIDTH);
+    expect(terrain.points[0]!.x).toBe(0);
+    expect(terrain.points[terrain.points.length - 1]!.x).toBe(WORLD_WIDTH);
     expect(terrain.pad).toEqual({ left: 250, right: 350, y: 0 });
 
     for (let x = 200; x <= 400; x += 1) {
@@ -79,7 +79,7 @@ describe("seeded terrain", () => {
   it("linearly interpolates terrain points and returns finite heights", () => {
     const terrain = createSimulation({ seed: 314159 }).terrain;
     const segments = terrain.points.slice(1).map((right, index) => ({
-      left: terrain.points[index],
+      left: terrain.points[index]!,
       right,
     }));
 

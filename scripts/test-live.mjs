@@ -35,7 +35,7 @@ await waitForDeployment(targetUrl);
 
 const child = spawn(
   process.execPath,
-  [playwrightCli, "test", "e2e/smoke.spec.ts", ...process.argv.slice(2)],
+  [playwrightCli, "test", ...process.argv.slice(2)],
   {
     cwd: repositoryRoot,
     env: { ...process.env, BASE_URL: targetUrl },

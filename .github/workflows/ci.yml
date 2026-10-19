@@ -38,10 +38,13 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Headless simulation demo
+        run: npm run sim:demo
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Local browser smoke tests
+      - name: Local Playwright tests
         run: npm run test:e2e
 
       - name: Build
@@ -79,7 +82,7 @@ jobs:
         uses: actions/deploy-pages@v4
 
   smoke:
-    name: Live smoke test
+    name: Live end-to-end tests
     needs: deploy
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -102,7 +105,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Smoke test deployed site
+      - name: Run full Playwright suite against deployed site
         env:
           BASE_URL: ${{ needs.deploy.outputs.page_url }}
         run: npm run test:e2e:live

@@ -62,7 +62,13 @@ it as a separate red/green cycle.
 - `code-reviewer`: independent review. Read-only.
 
 Agents must not run `git commit`, `git push`, or modify `.git`. The lead owns
-integration and delivery. Agents must not spawn additional agents.
+integration and delivery.
+
+Subagents may spawn additional subagents of their own kind when it genuinely
+parallelizes disjoint work. Delegated agents inherit the same ownership
+boundaries, may not commit or push, and must not change shared interfaces. Keep
+delegation to one additional level and no more than two concurrent children.
+The lead remains responsible for integration and final verification.
 
 ## Parallel execution
 

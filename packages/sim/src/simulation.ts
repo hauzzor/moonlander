@@ -1,12 +1,16 @@
 import { FIXED_DT, INITIAL_FUEL } from "./constants";
+import { evaluateOutcome } from "./collision";
 import { consumeFuel, integrate, thrusterEffect } from "./physics";
+import { createTerrain } from "./terrain";
 import type {
   Action,
   LanderState,
   LandingOutcome,
+  Observation,
   SimState,
   Simulation,
   SimulationOptions,
+  Terrain,
   Vec2,
 } from "./types";
 
@@ -73,15 +77,32 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
     body: initialBody(options),
     fuel: options.fuel ?? INITIAL_FUEL,
   };
-  // The seed has no observable effect on the flight model itself; it is kept
-  // so reset(seed) rebinds the simulation for the seeded terrain milestone.
   let seed = options.seed ?? 0;
+  let terrain = createTerrain(seed);
   let current = initialCurrent(initial);
 
   const getState = (): SimState => toSimState(current);
 
+  const getObservation = (): Observation => {
+    const x = current.body.position.x;
+    return {
+      x,
+      altitude: current.body.position.y - terrain.heightAt(x),
+      vx: current.body.velocity.x,
+      vy: current.body.velocity.y,
+      angle: current.body.angle,
+      angularVelocity: current.body.angularVelocity,
+      fuel: current.fuel,
+      padOffsetX: (terrain.pad.left + terrain.pad.right) / 2 - x,
+    };
+  };
+
   return {
     getState,
+    getObservation,
+    get terrain(): Terrain {
+      return terrain;
+    },
     step: (action: Action): SimState => {
       if (current.outcome !== "flying") {
         return getState();
@@ -92,12 +113,18 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         usage.leftScale,
         usage.rightScale,
       );
+      const body = integrate(current.body, effect, FIXED_DT);
       current = {
         tick: current.tick + 1,
-        body: integrate(current.body, effect, FIXED_DT),
+        body,
         fuel: usage.fuel,
-        thrusters: { left: action.left, right: action.right },
-        outcome: current.outcome,
+        // Report only thrusters that actually produced thrust this step,
+        // so commands issued at zero fuel read back as inactive.
+        thrusters: {
+          left: usage.leftScale > 0,
+          right: usage.rightScale > 0,
+        },
+        outcome: evaluateOutcome(body, terrain),
       };
       return getState();
     },
@@ -105,6 +132,7 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       if (newSeed !== undefined) {
         seed = newSeed;
       }
+      terrain = createTerrain(seed);
       current = initialCurrent(initial);
       return getState();
     },
