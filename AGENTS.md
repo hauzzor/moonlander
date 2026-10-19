@@ -64,6 +64,18 @@ it as a separate red/green cycle.
 Agents must not run `git commit`, `git push`, or modify `.git`. The lead owns
 integration and delivery. Agents must not spawn additional agents.
 
+## Parallel execution
+
+The lead may run multiple subagents concurrently only when their edit scopes
+are disjoint (for example, simulation tests and game tests, or `packages/sim`
+implementation and `packages/game` implementation). The lead freezes shared
+interfaces in `docs/spec.md` before parallel work starts.
+
+Only one Playwright process may run at a time because the local Vite server uses
+port 4173. Unit tests and typechecks may run in parallel. The lead serializes
+browser runs, integrates all changes, runs the full verification suite, and owns
+the final commit and push.
+
 ## Engineering rules
 
 - TypeScript strict mode; no `any` in public APIs.

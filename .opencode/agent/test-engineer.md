@@ -1,6 +1,6 @@
 ---
 description: Writes failing tests first for Moonlander features.
-mode: all
+mode: subagent
 model: opencode-go/gpt-6-luna
 variant: high
 color: warning

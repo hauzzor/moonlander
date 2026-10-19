@@ -67,20 +67,83 @@ The simulation stops advancing after any terminal outcome.
 The public API lives in `packages/sim/src/index.ts` and is imported as
 `@moonlander/sim`.
 
-Required concepts:
+Core shapes:
 
-- `Vec2`, `Action`, `Observation`, `Controller`, `SimulationOptions`,
-  `SimState`, `Simulation`.
-- `FIXED_DT`, `WORLD_WIDTH`, `PAD_WIDTH`, `SAFE_LANDING` limits.
+```ts
+interface Vec2 {
+  x: number;
+  y: number;
+}
+
+interface Action {
+  left: boolean;
+  right: boolean;
+}
+
+type LandingOutcome = "flying" | "landed" | "missed-pad" | "crashed";
+
+interface LanderState {
+  position: Vec2;
+  velocity: Vec2;
+  angle: number;
+  angularVelocity: number;
+}
+
+interface SimState {
+  tick: number;
+  time: number;
+  lander: LanderState;
+  fuel: number;
+  thrusters: Action;
+  outcome: LandingOutcome;
+}
+
+interface LanderStart {
+  position?: Vec2;
+  velocity?: Vec2;
+  angle?: number;
+  angularVelocity?: number;
+}
+
+interface SimulationOptions {
+  seed?: number;
+  fuel?: number;
+  start?: LanderStart;
+}
+
+interface Simulation {
+  getState(): SimState;
+  getObservation(): Observation;
+  step(action: Action): SimState;
+  reset(seed?: number): SimState;
+  readonly terrain: Terrain;
+}
+```
+
+Required exports:
+
+- `FIXED_DT = 1 / 120`, `MOON_GRAVITY = 1.62`, `WORLD_WIDTH = 600`,
+  `PAD_WIDTH = 100`, `INITIAL_FUEL = 100`, and `SAFE_LANDING` limits.
 - `createSimulation(options?)` creates a deterministic simulation. The same
   seed, initial state, and action sequence must produce exactly the same state.
+- Default start: position `{ x: 300, y: 90 }`, zero velocity, angle `0`, zero
+  angular velocity, full fuel, outcome `flying`.
 - `simulation.getState()` returns the current state.
 - `simulation.getObservation()` returns numeric controller observations.
 - `simulation.step(action)` advances exactly one fixed tick.
-- `simulation.reset(seed?)` returns to the initial state.
+- `simulation.reset(seed?)` returns to the initial state of that seed.
 - `simulation.terrain` exposes the generated terrain and pad bounds for
   rendering and analysis.
 - `Controller` defines the seam for future autonomous controllers.
+
+Fixed physics values for the initial lander:
+
+- mass `200` kg
+- body `36` m wide, `24` m tall
+- thruster force `500` N each
+- thruster cant `15` degrees
+- mounting points `{ x: -12, y: -12 }` and `{ x: 12, y: -12 }`
+- fuel burn rate `5` units per second per active thruster
 
 Use seeded pseudo-randomness for terrain. Do not use `Math.random` in the
 simulation package.

@@ -1,6 +1,6 @@
 ---
 description: Implements Moonlander Canvas rendering, input, HUD, and game loop.
-mode: all
+mode: subagent
 model: opencode-go/kimi-k2.7-code
 color: success
 permission:

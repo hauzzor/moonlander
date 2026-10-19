@@ -1,6 +1,6 @@
 ---
 description: Owns Moonlander CI, GitHub Pages deployment, and live browser verification.
-mode: all
+mode: subagent
 model: opencode-go/deepseek-v4.1-flash
 variant: high
 color: accent

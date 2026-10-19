@@ -1,6 +1,6 @@
 ---
 description: Implements the deterministic Moonlander simulation package.
-mode: all
+mode: subagent
 model: opencode-go/glm-5.3
 variant: high
 color: info

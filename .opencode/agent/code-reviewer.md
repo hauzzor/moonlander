@@ -1,6 +1,6 @@
 ---
 description: Independently reviews Moonlander behavior, architecture, and TDD evidence.
-mode: all
+mode: subagent
 model: opencode-go/deepseek-v4-pro
 variant: max
 color: error

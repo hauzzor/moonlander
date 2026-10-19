@@ -1,6 +1,6 @@
 ---
 description: Reviews Moonlander architecture, simulation API, and package boundaries.
-mode: all
+mode: subagent
 model: opencode-go/gpt-6-luna
 variant: high
 color: primary
