@@ -10,8 +10,14 @@ async function readNumericDataValue(locator: Locator): Promise<number> {
   return value;
 }
 
-test("HUD telemetry exposes numeric values for altitude, speeds, tilt, and fuel", async ({ page }) => {
+test("Starship HUD exposes finite telemetry and removes landing HUD hooks", async ({ page }) => {
   await page.goto("./");
+
+  for (const testId of ["hud-hull", "hud-speed", "hud-progress", "hud-score"]) {
+    const telemetry = page.getByTestId(testId);
+    await expect(telemetry).toBeVisible();
+    await readNumericDataValue(telemetry);
+  }
 
   for (const testId of [
     "hud-altitude",
@@ -20,21 +26,8 @@ test("HUD telemetry exposes numeric values for altitude, speeds, tilt, and fuel"
     "hud-tilt",
     "hud-fuel",
   ]) {
-    const telemetry = page.getByTestId(testId);
-    await expect(telemetry).toBeVisible();
-    await readNumericDataValue(telemetry);
+    await expect(page.getByTestId(testId)).toHaveCount(0);
   }
-});
-
-test("altitude decreases over time without input", async ({ page }) => {
-  await page.goto("./");
-
-  const altitude = page.getByTestId("hud-altitude");
-  const initialAltitude = await readNumericDataValue(altitude);
-
-  await expect
-    .poll(() => readNumericDataValue(altitude), { timeout: 5_000 })
-    .toBeLessThan(initialAltitude);
 });
 
 test("holding Q activates only the left thruster and releasing it deactivates it", async ({ page }) => {
@@ -49,6 +42,7 @@ test("holding Q activates only the left thruster and releasing it deactivates it
 
   await page.keyboard.up("q");
   await expect(leftThruster).toHaveAttribute("data-active", "false");
+  await expect(rightThruster).toHaveAttribute("data-active", "false");
 });
 
 test("holding W activates only the right thruster", async ({ page }) => {
@@ -62,28 +56,43 @@ test("holding W activates only the right thruster", async ({ page }) => {
   await expect(leftThruster).toHaveAttribute("data-active", "false");
 });
 
-test("R restores the initial altitude and leaves the outcome hidden", async ({ page }) => {
+test("R starts a new seeded run and restores hull, score, and progress", async ({ page }) => {
   await page.goto("./");
 
-  const altitude = page.getByTestId("hud-altitude");
-  const initialAltitude = await readNumericDataValue(altitude);
+  const seedDisplay = page.getByTestId("seed-display");
+  const initialSeed = (await seedDisplay.innerText()).trim();
+  const hull = page.getByTestId("hud-hull");
+  const score = page.getByTestId("hud-score");
+  const progress = page.getByTestId("hud-progress");
 
   await expect
-    .poll(() => readNumericDataValue(altitude), { timeout: 5_000 })
-    .toBeLessThan(initialAltitude - 2);
+    .poll(() => readNumericDataValue(hull), { timeout: 12_000 })
+    .toBeLessThan(100);
+  await expect.poll(() => readNumericDataValue(progress)).toBeGreaterThan(0);
+  await expect.poll(() => readNumericDataValue(score)).toBeGreaterThan(0);
 
   await page.keyboard.press("r");
 
   await expect
-    .poll(
-      async () => Math.abs((await readNumericDataValue(altitude)) - initialAltitude),
-      { timeout: 5_000 },
-    )
-    .toBeLessThan(1);
+    .poll(() => seedDisplay.innerText())
+    .not.toBe(initialSeed);
+  await expect.poll(() => readNumericDataValue(hull)).toBe(100);
+  await expect.poll(() => readNumericDataValue(score)).toBe(0);
+  await expect.poll(() => readNumericDataValue(progress)).toBe(0);
 
   const outcome = page.getByTestId("outcome");
   await expect(outcome).toBeAttached();
   await expect(outcome).toBeHidden();
+});
+
+test("loading an unsigned seed updates the current seed display", async ({ page }) => {
+  await page.goto("./");
+
+  const seed = 305419896;
+  await page.getByTestId("seed-input").fill(String(seed));
+  await page.getByTestId("seed-load").click();
+
+  await expect(page.getByTestId("seed-display")).toContainText(String(seed));
 });
 
 test("on-screen instructions mention Q, W, and R", async ({ page }) => {
@@ -94,6 +103,17 @@ test("on-screen instructions mention Q, W, and R", async ({ page }) => {
   await expect(instructions).toContainText(/\bQ\b/i);
   await expect(instructions).toContainText(/\bW\b/i);
   await expect(instructions).toContainText(/\bR\b/i);
+});
+
+test("progress increases over time without input", async ({ page }) => {
+  await page.goto("./");
+
+  const progress = page.getByTestId("hud-progress");
+  const initialProgress = await readNumericDataValue(progress);
+
+  await expect
+    .poll(() => readNumericDataValue(progress), { timeout: 5_000 })
+    .toBeGreaterThan(initialProgress);
 });
 
 test("game canvas contains rendered pixels that differ from its background", async ({ page }) => {
@@ -132,4 +152,12 @@ test("game canvas contains rendered pixels that differ from its background", asy
   });
 
   expect(hasNonBackgroundPixels).toBe(true);
+});
+
+test("outcome overlay is attached but hidden while the Starship is flying", async ({ page }) => {
+  await page.goto("./");
+
+  const outcome = page.getByTestId("outcome");
+  await expect(outcome).toBeAttached();
+  await expect(outcome).toBeHidden();
 });

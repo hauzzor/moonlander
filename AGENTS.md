@@ -1,11 +1,21 @@
 # Moonlander Agent Guide
 
+> Non-trivial changes require a change intake interview and explicit user
+> confirmation of the written brief before any implementation or test work.
+> See [Change intake interview](#change-intake-interview).
+>
+> After every successful production build, commit, push, and verify the live
+> GitHub Pages deployment. See
+> [Delivery after every build](#delivery-after-every-build).
+
 ## Product
 
-Moonlander is a 2D side-view lunar landing game. The player fires two canted,
-downward-facing thrusters (Q = left, W = right) to land on a marked lunar pad.
-The simulation is deterministic and headless so it can later be used to train
-and evaluate autonomous controllers.
+Moonlander is a 2D side-view Starship endless-course game. The player fires two
+canted thrusters (Q = left, W = right) to weave through a seeded, procedurally
+generated field of curved walls and gates, surviving hull damage while
+accumulating distance and gate score. Fuel is unlimited. The simulation is
+deterministic and headless so it can later be used to train and evaluate
+autonomous controllers.
 
 Repository: https://github.com/hauzzor/moonlander
 Live game: https://hauzzor.github.io/moonlander/
@@ -34,7 +44,60 @@ script execution is disabled.
 - Browser tests: `npm.cmd run test:e2e`
 - Live browser smoke test: `npm.cmd run test:e2e:live`
 
+## Change intake interview
+
+No non-trivial change may be implemented, tested, or delegated for
+implementation until the intake interview is complete and the user has
+explicitly confirmed the written brief.
+
+A change is non-trivial when it:
+
+- adds or changes gameplay, physics, controls, balance, HUD, rendering,
+  terrain, or landing rules;
+- changes the public `@moonlander/sim` API, observation shape, or the
+  simulation/game boundary;
+- spans multiple packages or requires coordinated test, implementation, and
+  review work;
+- has more than one reasonable interpretation or ambiguous acceptance
+  criteria;
+- fixes a bug not already pinned by a failing test with a clear expected
+  behavior.
+
+Trivial edits may proceed directly: typos, comments, formatting, documentation
+wording, dependency updates without behavior changes, mechanical refactors,
+and fixes fully specified by an existing failing test. When in doubt, treat the
+change as non-trivial.
+
+The lead owns this gate and must:
+
+1. Stop. Do not edit code, write tests, or spawn implementation agents.
+2. Restate the request and identify affected packages, interfaces, current
+   behavior, and constraints.
+3. Consult the relevant read-only specialists, at minimum `game-architect` for
+   scope and interface impact and `test-engineer` for acceptance criteria, plus
+   the responsible engineer for feasibility. Specialists may draft questions,
+   risks, options, and criteria but must not implement or write tests.
+   Subagents cannot talk to the user directly; the lead relays questions and
+   answers.
+4. Interview the user in focused rounds until every open question is resolved.
+   Offer concrete interpretations and tradeoffs rather than assumptions.
+5. Write `docs/changes/YYYY-MM-DD-<slug>.md` with the original request, goal,
+   current behavior, desired behavior, non-goals, acceptance criteria, edge
+   cases, affected interfaces, determinism/boundary impact, verification plan,
+   and open questions. Open questions must be empty before confirmation. This
+   brief is the only file change permitted before confirmation.
+6. Read the brief back, state the lead's understanding, and ask for an
+   unambiguous go-ahead such as "confirmed" or "start development."
+7. Begin the test-driven development cycle only after that confirmation.
+
+If scope changes during implementation, stop and re-run the intake interview.
+If the user explicitly waives the interview for a specific change, record the
+waiver in the brief. The brief complements the tests; tests remain the
+executable specification.
+
 ## Test-driven development
+
+Complete the change intake interview before starting this cycle.
 
 Every feature follows this order:
 
@@ -50,6 +113,21 @@ Every feature follows this order:
 Tests are the specification. Do not weaken or delete a test to obtain a green
 run. If a test is wrong, the test engineer must explain the defect and update
 it as a separate red/green cycle.
+
+## Delivery after every build
+
+After every successful production build, the lead must:
+
+1. Inspect `git status` and `git diff` and stage only the intended changes.
+2. Commit the green build with a concise message matching the repository style.
+3. Push the commit to `origin/main`.
+4. Wait for the GitHub Pages deployment and run the live Playwright suite
+   (`npm.cmd run test:e2e:live`) or verify the equivalent CI smoke job.
+5. Report the deployment result.
+
+Do not commit or push a failing build. If the user explicitly waives delivery
+for a specific build, record the waiver in the change brief. This rule applies
+to every build from now on.
 
 ## Agent ownership
 

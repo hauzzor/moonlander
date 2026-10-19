@@ -8,9 +8,9 @@ export interface Action {
   right: boolean;
 }
 
-export type LandingOutcome = "flying" | "landed" | "missed-pad" | "crashed";
+export type RunOutcome = "flying" | "destroyed";
 
-export interface LanderState {
+export interface ShipState {
   position: Vec2;
   velocity: Vec2;
   angle: number;
@@ -20,13 +20,18 @@ export interface LanderState {
 export interface SimState {
   tick: number;
   time: number;
-  lander: LanderState;
-  fuel: number;
+  seed: number;
+  ship: ShipState;
+  hull: number;
+  invulnerable: boolean;
   thrusters: Action;
-  outcome: LandingOutcome;
+  outcome: RunOutcome;
+  score: number;
+  progress: number;
+  gatesPassed: number;
 }
 
-export interface LanderStart {
+export interface ShipStart {
   position?: Vec2;
   velocity?: Vec2;
   angle?: number;
@@ -35,32 +40,50 @@ export interface LanderStart {
 
 export interface SimulationOptions {
   seed?: number;
-  fuel?: number;
-  start?: LanderStart;
+  hull?: number;
+  start?: ShipStart;
+  field?: Field;
 }
 
-export interface TerrainPad {
-  left: number;
-  right: number;
-  y: number;
-}
-
-export interface Terrain {
-  seed: number;
+export interface CurvedWall {
+  id: string;
   points: readonly Vec2[];
-  pad: TerrainPad;
-  heightAt(x: number): number;
+}
+
+export interface Gate {
+  id: string;
+  center: Vec2;
+  radius: number;
+  normal: Vec2;
+}
+
+export interface FieldChunk {
+  coord: Vec2;
+  walls: readonly CurvedWall[];
+  gates: readonly Gate[];
+}
+
+export interface Field {
+  seed: number;
+  chunkSize: number;
+  groundY: number;
+  getChunk(cx: number, cy: number): FieldChunk;
+  chunksInView(center: Vec2, radius: number): readonly FieldChunk[];
 }
 
 export interface Observation {
   x: number;
-  altitude: number;
+  y: number;
   vx: number;
   vy: number;
   angle: number;
   angularVelocity: number;
-  fuel: number;
-  padOffsetX: number;
+  hull: number;
+  progress: number;
+  score: number;
+  nearestWallDistance: number;
+  nearestGateDistance: number;
+  nearestGateAngle: number;
 }
 
 export interface Controller {
@@ -73,5 +96,5 @@ export interface Simulation {
   getObservation(): Observation;
   step(action: Action): SimState;
   reset(seed?: number): SimState;
-  readonly terrain: Terrain;
+  readonly field: Field;
 }

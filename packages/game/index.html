@@ -3,56 +3,121 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Moonlander</title>
+    <meta name="theme-color" content="#080a14" />
+    <title>Moonlander — Starship Course</title>
   </head>
   <body>
     <div id="app">
-      <header>
-        <h1>Moonlander</h1>
+      <header class="topbar">
+        <div class="brand">
+          <h1>Moonlander</h1>
+          <p class="subtitle">Starship Course</p>
+        </div>
       </header>
       <main class="game">
-        <div class="hud" aria-live="polite">
-          <div class="hud-item" data-testid="hud-altitude" data-value="0">
-            ALT <span class="hud-value">0</span>m
+        <div class="game-hud">
+          <div class="telemetry" role="group" aria-label="Flight telemetry">
+            <div class="hud-item" data-testid="hud-hull" data-value="100">
+              <span class="hud-label">HULL</span>
+              <span class="hud-value">100</span>
+            </div>
+            <div class="hud-item" data-testid="hud-speed" data-value="0">
+              <span class="hud-label">SPEED</span>
+              <span class="hud-value">0.0</span><span class="hud-unit">m/s</span>
+            </div>
+            <div class="hud-item" data-testid="hud-progress" data-value="0">
+              <span class="hud-label">PROGRESS</span>
+              <span class="hud-value">0</span><span class="hud-unit">m</span>
+            </div>
+            <div class="hud-item" data-testid="hud-score" data-value="0">
+              <span class="hud-label">SCORE</span>
+              <span class="hud-value">0</span>
+            </div>
+            <div
+              class="hud-item thruster"
+              data-testid="thruster-left"
+              data-active="false"
+            >
+              <kbd class="thruster-key">Q</kbd>
+              <span class="thruster-name">LEFT</span>
+            </div>
+            <div
+              class="hud-item thruster"
+              data-testid="thruster-right"
+              data-active="false"
+            >
+              <kbd class="thruster-key">W</kbd>
+              <span class="thruster-name">RIGHT</span>
+            </div>
           </div>
-          <div class="hud-item" data-testid="hud-vspeed" data-value="0">
-            V.SPD <span class="hud-value">0</span>m/s
-          </div>
-          <div class="hud-item" data-testid="hud-hspeed" data-value="0">
-            H.SPD <span class="hud-value">0</span>m/s
-          </div>
-          <div class="hud-item" data-testid="hud-tilt" data-value="0">
-            TILT <span class="hud-value">0</span>°
-          </div>
-          <div class="hud-item" data-testid="hud-fuel" data-value="0">
-            FUEL <span class="hud-value">0</span>%
-          </div>
-          <div
-            class="hud-item thruster"
-            data-testid="thruster-left"
-            data-active="false"
-          >
-            L
-          </div>
-          <div
-            class="hud-item thruster"
-            data-testid="thruster-right"
-            data-active="false"
-          >
-            R
+          <div class="seed-panel" role="group" aria-label="Course seed">
+            <div class="seed-heading">
+              <span class="seed-label">SEED</span>
+              <output class="seed-display" data-testid="seed-display">1</output>
+              <button
+                class="seed-copy"
+                id="seed-copy"
+                type="button"
+                aria-label="Copy current seed"
+              >
+                COPY
+              </button>
+            </div>
+            <div class="seed-load-row">
+              <label class="visually-hidden" for="seed-input">Course seed</label>
+              <input
+                class="seed-input"
+                id="seed-input"
+                data-testid="seed-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label="Unsigned 32-bit course seed"
+                placeholder="32-bit seed"
+              />
+              <button
+                class="seed-load"
+                data-testid="seed-load"
+                id="seed-load"
+                type="button"
+              >
+                LOAD
+              </button>
+            </div>
           </div>
         </div>
+
         <canvas
           id="game-canvas"
           data-testid="game-canvas"
-          aria-label="Moonlander game canvas"
-        ></canvas>
+          aria-label="Starship course game canvas"
+        >
+          The Starship course is rendered here. Use Q and W to fire thrusters and
+          R to start a new seeded run.
+        </canvas>
+
         <div class="instructions" data-testid="instructions">
-          <kbd>Q</kbd> left thruster &nbsp; <kbd>W</kbd> right thruster &nbsp;
-          <kbd>R</kbd> restart
+          <span><kbd>Q</kbd> left thruster</span>
+          <span><kbd>W</kbd> right thruster</span>
+          <span><kbd>R</kbd> new run</span>
+          <span class="instructions-hint">Thread the gates. Keep the hull intact.</span>
         </div>
-        <div class="outcome hidden" data-testid="outcome" role="status">
-          <span class="outcome-text"></span>
+
+        <div
+          class="outcome hidden"
+          data-testid="outcome"
+          role="status"
+          aria-live="polite"
+          aria-hidden="true"
+        >
+          <div class="outcome-card">
+            <p class="outcome-text">Starship Destroyed</p>
+            <p class="outcome-score">
+              Final score <span class="outcome-score-value">0</span>
+            </p>
+            <p class="outcome-hint">Press <kbd>R</kbd> for a new course</p>
+          </div>
         </div>
       </main>
     </div>

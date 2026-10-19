@@ -1,7 +1,8 @@
 # Moonlander
 
-A 2D side-view lunar landing game. Fire the two canted thrusters to slow the
-lander and set it down on the marked pad.
+A 2D side-view Starship endless-course game. Fire the two canted thrusters to
+weave through a seeded, procedurally generated field of curved walls and gates.
+Thrust is unlimited; the hull is not.
 
 Play: https://hauzzor.github.io/moonlander/
 
@@ -9,22 +10,25 @@ Play: https://hauzzor.github.io/moonlander/
 
 - `Q` — fire the left thruster (upward and rightward force, clockwise torque)
 - `W` — fire the right thruster (upward and leftward force, counter-clockwise torque)
-- `R` — restart
+- `R` — start a new run with a new seed
+- Seed field — enter an unsigned 32-bit seed and load it to replay a course
 
-Both thrusters together produce balanced vertical lift. Fuel is shared and
-limited.
+Both thrusters together produce balanced vertical lift. There is no fuel.
 
-## Landing rules
+## Rules
 
-A touchdown begins when either landing foot touches down; one foot may contact
-first. Nose or body contact crashes. The landing is safe when:
+- The Starship starts with 100 hull.
+- Impacts below roughly 2 m/s are harmless; faster impacts damage the hull and
+  bounce the ship away from the surface.
+- A short invulnerability window follows each damaging impact.
+- The run ends when hull reaches zero.
+- Progress is the farthest distance reached from the spawn point.
+- Score is `floor(progress)` plus 50 points for each gate passed.
+- Gates are optional scoring challenges. Hitting a gate frame is a collision.
 
-- vertical speed is at most 2.5 m/s
-- horizontal speed is at most 1.5 m/s
-- tilt is at most 12 degrees
-
-A safe touchdown on the pad wins. A safe touchdown elsewhere is a missed pad;
-unsafe contact crashes.
+The field is infinite in every direction with a solid ground plane at `y = 0`.
+The course is generated deterministically from the seed, so the same seed and
+actions produce the same run.
 
 ## Project layout
 
@@ -36,8 +40,8 @@ unsafe contact crashes.
 - `.github/workflows/ci.yml` — verification, GitHub Pages deployment, and live
   browser tests against the deployed URL.
 
-The simulation is fixed at 120 Hz with seeded terrain and exposes observations
-and a `Controller` interface for future autonomous control experiments:
+The simulation is fixed at 120 Hz with a seeded infinite field and exposes
+observations and a `Controller` interface for autonomous control experiments:
 [`docs/autonomy.md`](docs/autonomy.md).
 
 ## Local development

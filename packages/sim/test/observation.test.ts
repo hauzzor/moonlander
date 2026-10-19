@@ -1,136 +1,143 @@
 import { describe, expect, it } from "vitest";
 import type { Controller, Observation } from "../src/index";
-import { createSimulation } from "../src/index";
+import {
+  bothThrusters,
+  createControlledField,
+  createSimulationWithField,
+  gateAt,
+  noThrusters,
+  sim,
+  verticalWall,
+} from "./helpers";
 
-const noThrusters = { left: false, right: false };
+const observationKeys = [
+  "x",
+  "y",
+  "vx",
+  "vy",
+  "angle",
+  "angularVelocity",
+  "hull",
+  "progress",
+  "score",
+  "nearestWallDistance",
+  "nearestGateDistance",
+  "nearestGateAngle",
+].sort();
 
 function expectFiniteObservation(observation: Observation) {
-  expect(
-    [
-      observation.x,
-      observation.altitude,
-      observation.vx,
-      observation.vy,
-      observation.angle,
-      observation.angularVelocity,
-      observation.fuel,
-      observation.padOffsetX,
-    ].every(Number.isFinite),
-  ).toBe(true);
+  expect(Object.values(observation).every(Number.isFinite)).toBe(true);
 }
 
-describe("autonomy-facing simulation API", () => {
-  it("returns every documented observation field for the default start", () => {
-    const simulation = createSimulation();
+describe("Starship autonomy observation API", () => {
+  it("returns exactly the documented finite fields without landing or fuel data", () => {
+    const field = createControlledField({ seed: 41 });
+    const simulation = createSimulationWithField(field);
     const observation = simulation.getObservation();
 
-    expect(simulation.terrain.heightAt(300)).toBe(0);
+    expect(Object.keys(observation).sort()).toEqual(observationKeys);
     expect(observation).toEqual({
-      x: 300,
-      altitude: 90,
+      x: 0,
+      y: 60,
       vx: 0,
       vy: 0,
       angle: 0,
       angularVelocity: 0,
-      fuel: 100,
-      padOffsetX: 0,
+      hull: 100,
+      progress: 0,
+      score: 0,
+      nearestWallDistance: sim.SENSOR_RANGE,
+      nearestGateDistance: -1,
+      nearestGateAngle: 0,
     });
     expectFiniteObservation(observation);
+    for (const removedField of ["fuel", "altitude", "padOffsetX", "pad"]) {
+      expect(removedField in observation).toBe(false);
+    }
   });
 
-  it("measures altitude above terrain at the lander's non-pad x", () => {
-    const simulation = createSimulation({
-      start: { position: { x: 80, y: 120 } },
-    });
-    const terrainHeight = simulation.terrain.heightAt(80);
-    const observation = simulation.getObservation();
+  it("measures nearest wall clearance from the capsule hull surface", () => {
+    const field = createControlledField({ walls: [verticalWall("sensor-wall", 40)] });
+    const observation = createSimulationWithField(field).getObservation();
 
-    expect(terrainHeight).toBeGreaterThan(0);
-    expect(observation.altitude).toBeCloseTo(120 - terrainHeight, 12);
-  });
-
-  it("reports the pad center minus the lander's custom x position", () => {
-    const observation = createSimulation({
-      start: { position: { x: 275, y: 90 } },
-    }).getObservation();
-
-    expect(observation.padOffsetX).toBe(25);
-  });
-
-  it("updates velocity and terrain-relative altitude after a simulation step", () => {
-    const simulation = createSimulation();
-    const before = simulation.getObservation();
-    const state = simulation.step(noThrusters);
-    const after = simulation.getObservation();
-
-    expect(after.vy).toBe(state.lander.velocity.y);
-    expect(after.vy).toBeLessThan(before.vy);
-    expect(after.altitude).toBeCloseTo(
-      state.lander.position.y - simulation.terrain.heightAt(state.lander.position.x),
+    expect(observation.nearestWallDistance).toBeCloseTo(
+      40 - sim.SHIP_CAPSULE_HALF_LENGTH - sim.SHIP_RADIUS - sim.WALL_RADIUS,
       12,
     );
-    expect(after.altitude).toBeLessThan(before.altitude);
   });
 
-  it("lets a typed Controller act on an observation and step the simulation", () => {
-    const options = {
-      seed: 41,
-      start: {
-        position: { x: 275, y: 120 },
-        velocity: { x: 0, y: -1.5 },
-      },
-    };
-    const controlledSimulation = createSimulation(options);
-    const directlySteppedSimulation = createSimulation(options);
+  it("reports the nearest unpassed gate center distance and world angle", () => {
+    const field = createControlledField({ gates: [gateAt("sensor-gate", { x: 30, y: 60 })] });
+    const observation = createSimulationWithField(field).getObservation();
+
+    expect(observation.nearestGateDistance).toBe(30);
+    expect(observation.nearestGateAngle).toBe(0);
+  });
+
+  it("uses the documented no-nearby-wall and no-gate sentinels", () => {
+    const field = createControlledField();
+    const observation = createSimulationWithField(field).getObservation();
+
+    expect(observation.nearestWallDistance).toBe(sim.SENSOR_RANGE);
+    expect(observation.nearestGateDistance).toBe(-1);
+    expect(observation.nearestGateAngle).toBe(0);
+  });
+
+  it("updates finite state and course observations after thrust and gravity steps", () => {
+    const field = createControlledField();
+    const simulation = createSimulationWithField(field);
+    const before = simulation.getObservation();
+
+    for (const action of [bothThrusters, noThrusters, { left: true, right: false }]) {
+      simulation.step(action);
+      const observation = simulation.getObservation();
+      expectFiniteObservation(observation);
+      expect(Object.keys(observation).sort()).toEqual(observationKeys);
+    }
+
+    const after = simulation.getObservation();
+    expect(after.y).not.toBe(before.y);
+    expect(after.hull).toBe(100);
+  });
+
+  it("supports typed controllers and deterministic controller-driven replay", () => {
+    const fieldA = sim.createField(41);
+    const fieldB = sim.createField(41);
+    const first = sim.createSimulation({ seed: 41, field: fieldA });
+    const second = sim.createSimulation({ seed: 41, field: fieldB });
     const controller: Controller = {
       act(observation: Observation) {
         return {
-          left: observation.padOffsetX > 0,
-          right: observation.vy < -1,
+          left: observation.nearestGateAngle > 0 || observation.vy < -0.2,
+          right: observation.nearestGateAngle < 0 || observation.hull < 50,
         };
       },
     };
-    const action = controller.act(controlledSimulation.getObservation());
+    const actions = [];
 
-    expect(action).toEqual({ left: true, right: true });
-    expect(controlledSimulation.step(action)).toEqual(
-      directlySteppedSimulation.step(action),
-    );
-  });
-
-  it("allows a Controller to omit reset or provide it", () => {
-    const withoutReset: Controller = {
-      act(_observation: Observation) {
-        return noThrusters;
-      },
-    };
-    const withReset: Controller = {
-      act(_observation: Observation) {
-        return noThrusters;
-      },
-      reset() {},
-    };
-
-    expect(withoutReset.reset).toBeUndefined();
-    expect(withReset.reset).toBeTypeOf("function");
-  });
-
-  it("keeps every observation field finite through steps and thrust bursts", () => {
-    const simulation = createSimulation();
-    const actions = [
-      { left: true, right: true },
-      { left: true, right: true },
-      noThrusters,
-      { left: true, right: false },
-      { left: false, right: true },
-      noThrusters,
-      { left: true, right: true },
-      noThrusters,
-    ];
-
-    for (const action of actions) {
-      simulation.step(action);
-      expectFiniteObservation(simulation.getObservation());
+    for (let tick = 0; tick < 120; tick += 1) {
+      const action = controller.act(first.getObservation());
+      actions.push(action);
+      expect(first.step(action)).toEqual(second.step(action));
     }
+
+    expect(actions.length).toBe(120);
+    expect(controller.reset).toBeUndefined();
+    expectFiniteObservation(first.getObservation());
+  });
+
+  it("permits a controller to implement its optional reset hook", () => {
+    let resets = 0;
+    const controller: Controller = {
+      act(_observation: Observation) {
+        return noThrusters;
+      },
+      reset() {
+        resets += 1;
+      },
+    };
+
+    controller.reset?.();
+    expect(resets).toBe(1);
   });
 });
