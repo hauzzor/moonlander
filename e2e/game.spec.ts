@@ -121,8 +121,8 @@ test("game canvas contains rendered pixels that differ from its background", asy
 
     for (let index = 0; index < pixels.length; index += 4) {
       if (
-        pixels[index + 3] > 0 &&
-        (pixels[index] !== red || pixels[index + 1] !== green || pixels[index + 2] !== blue)
+        pixels[index + 3]! > 0 &&
+        (pixels[index]! !== red || pixels[index + 1]! !== green || pixels[index + 2]! !== blue)
       ) {
         return true;
       }
