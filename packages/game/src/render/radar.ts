@@ -1,6 +1,6 @@
 import {
-  SENSOR_INTERVAL_SECONDS,
-  SENSOR_RAY_COUNT,
+  EYE_SENSOR_INTERVAL_SECONDS,
+  EYE_SENSOR_RAY_COUNT,
   type SimState,
   type Vec2,
 } from "@moonlander/sim";
@@ -25,7 +25,7 @@ export function drawRadar(
   camera: Camera,
   state: SimState,
 ): void {
-  const reading = state.sensor;
+  const reading = state.sensors.eye;
   if (reading.radius <= 0 || reading.distances.length === 0) {
     return;
   }
@@ -57,11 +57,10 @@ export function drawRadar(
   }
 
   const points: Vec2[] = [];
-  for (let index = 0; index < SENSOR_RAY_COUNT; index += 1) {
+  for (let index = 0; index < EYE_SENSOR_RAY_COUNT; index += 1) {
     const distance = reading.distances[index] ?? reading.radius;
     const length = clamp(distance, 0, reading.radius) * distanceScale;
-    const relativeAngle = (index / SENSOR_RAY_COUNT) * Math.PI * 2;
-    const angle = state.ship.angle + relativeAngle;
+    const angle = (index / EYE_SENSOR_RAY_COUNT) * Math.PI * 2;
     points.push({
       x: center.x + Math.cos(angle) * length,
       y: center.y - Math.sin(angle) * length,
@@ -83,10 +82,10 @@ export function drawRadar(
   ctx.stroke();
 
   const sweepPhase =
-    ((state.time % SENSOR_INTERVAL_SECONDS) / SENSOR_INTERVAL_SECONDS) *
+    ((state.time % EYE_SENSOR_INTERVAL_SECONDS) /
+      EYE_SENSOR_INTERVAL_SECONDS) *
     Math.PI *
     2;
-  const sweepAngle = state.ship.angle + sweepPhase;
   ctx.save();
   ctx.strokeStyle = "rgba(131, 255, 244, 0.52)";
   ctx.lineWidth = 1.5;
@@ -95,8 +94,8 @@ export function drawRadar(
   ctx.beginPath();
   ctx.moveTo(center.x, center.y);
   ctx.lineTo(
-    center.x + Math.cos(sweepAngle) * radarRadius,
-    center.y - Math.sin(sweepAngle) * radarRadius,
+    center.x + Math.cos(sweepPhase) * radarRadius,
+    center.y - Math.sin(sweepPhase) * radarRadius,
   );
   ctx.stroke();
   ctx.restore();

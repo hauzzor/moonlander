@@ -6,10 +6,10 @@ import {
   FIXED_DT,
   GRAVITY,
   INITIAL_HULL,
+  EYE_SENSOR_INTERVAL_SECONDS,
+  EYE_SENSOR_VIEW_DEFAULT,
   INVULNERABILITY_SECONDS,
   LINEAR_DRAG,
-  SENSOR_INTERVAL_SECONDS,
-  SENSOR_VIEW_DEFAULT,
   SHIP_INERTIA,
   SHIP_MASS,
   START_POSITION,
@@ -21,13 +21,14 @@ import {
 import { createField } from "./field";
 import { clamp } from "./geometry";
 import { thrusterEffect } from "./physics";
-import { clampSensorRadius, scanSensor } from "./sensor";
+import { clampEyeSensorRadius, scanEyeSensor } from "./sensor";
 import type {
   Action,
+  EyeSensorReading,
   Field,
   Observation,
   RunOutcome,
-  SensorReading,
+  SensorSuite,
   ShipState,
   ShipStart,
   SimState,
@@ -37,7 +38,9 @@ import type {
 } from "./types";
 
 const INVULNERABILITY_TICKS = Math.round(INVULNERABILITY_SECONDS / FIXED_DT);
-const SENSOR_INTERVAL_TICKS = Math.round(SENSOR_INTERVAL_SECONDS / FIXED_DT);
+const EYE_SENSOR_INTERVAL_TICKS = Math.round(
+  EYE_SENSOR_INTERVAL_SECONDS / FIXED_DT,
+);
 
 interface Current {
   tick: number;
@@ -47,8 +50,8 @@ interface Current {
   thrusters: Action;
   outcome: RunOutcome;
   progress: number;
-  sensorRadius: number;
-  sensor: SensorReading;
+  eyeSensorRadius: number;
+  eyeSensor: EyeSensorReading;
 }
 
 function copyVec(vector: Vec2): Vec2 {
@@ -67,7 +70,7 @@ function initialBody(start: ShipStart | undefined): ShipState {
 function initialCurrent(
   body: ShipState,
   hull: number,
-  sensorRadius: number,
+  eyeSensorRadius: number,
   field: Field,
 ): Current {
   return {
@@ -80,17 +83,41 @@ function initialCurrent(
     },
     hull: clamp(hull, 0, INITIAL_HULL),
     invulnerableTicksRemaining: 0,
-    thrusters: { left: false, right: false },
+    thrusters: { left: false, right: false, rear: false },
     outcome: hull <= 0 ? "destroyed" : "flying",
     progress: 0,
-    sensorRadius,
-    sensor: scanSensor(
+    eyeSensorRadius,
+    eyeSensor: scanEyeSensor(
       field,
       body.position,
       body.angle,
-      sensorRadius,
+      eyeSensorRadius,
       0,
     ),
+  };
+}
+
+function normalizeAngle(angle: number): number {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function sensorSuiteFor(current: Current, spawn: Vec2): SensorSuite {
+  const { position, velocity } = current.body;
+  const speed = Math.hypot(velocity.x, velocity.y);
+
+  return {
+    eye: current.eyeSensor,
+    direction: { angle: normalizeAngle(current.body.angle) },
+    distanceToStart: Math.hypot(
+      position.x - spawn.x,
+      position.y - spawn.y,
+    ),
+    velocity: {
+      vx: velocity.x,
+      vy: velocity.y,
+      speed,
+      angle: speed === 0 ? 0 : Math.atan2(velocity.y, velocity.x),
+    },
   };
 }
 
@@ -98,7 +125,11 @@ function scoreFor(progress: number): number {
   return Math.floor(progress);
 }
 
-function toSimState(current: Current, seed: number): SimState {
+function toSimState(
+  current: Current,
+  seed: number,
+  spawn: Vec2,
+): SimState {
   return {
     tick: current.tick,
     time: current.tick * FIXED_DT,
@@ -114,12 +145,13 @@ function toSimState(current: Current, seed: number): SimState {
     thrusters: {
       left: current.thrusters.left,
       right: current.thrusters.right,
+      rear: current.thrusters.rear,
     },
     outcome: current.outcome,
     score: scoreFor(current.progress),
     progress: current.progress,
-    sensorRadius: current.sensorRadius,
-    sensor: current.sensor,
+    eyeSensorRadius: current.eyeSensorRadius,
+    sensors: sensorSuiteFor(current, spawn),
   };
 }
 
@@ -130,18 +162,20 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
 
   const bodyTemplate = initialBody(options.start);
   const hullTemplate = options.hull ?? INITIAL_HULL;
-  const spawnX = bodyTemplate.position.x;
-  let configuredSensorRadius = clampSensorRadius(
-    options.sensorRadius ?? SENSOR_VIEW_DEFAULT,
+  const spawnPosition = copyVec(bodyTemplate.position);
+  const spawnX = spawnPosition.x;
+  let configuredEyeSensorRadius = clampEyeSensorRadius(
+    options.eyeSensorRadius ?? EYE_SENSOR_VIEW_DEFAULT,
   );
   let current = initialCurrent(
     bodyTemplate,
     hullTemplate,
-    configuredSensorRadius,
+    configuredEyeSensorRadius,
     activeField,
   );
 
-  const getState = (): SimState => toSimState(current, activeField.seed);
+  const getState = (): SimState =>
+    toSimState(current, activeField.seed, spawnPosition);
 
   const getObservation = (): Observation => {
     const { position, velocity } = current.body;
@@ -170,8 +204,8 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       tunnelHeading: heading,
       forwardSpeed: velocity.x * tangent.x + velocity.y * tangent.y,
       lateralSpeed: velocity.x * normal.x + velocity.y * normal.y,
-      sensorRadius: current.sensorRadius,
-      sensor: current.sensor,
+      eyeSensorRadius: current.eyeSensorRadius,
+      sensors: sensorSuiteFor(current, spawnPosition),
     };
   };
 
@@ -239,16 +273,16 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       );
       const tick = current.tick + 1;
       const outcome = hull <= 0 ? "destroyed" : "flying";
-      const sensor =
-        outcome === "flying" && tick % SENSOR_INTERVAL_TICKS === 0
-          ? scanSensor(
+      const eyeSensor =
+        outcome === "flying" && tick % EYE_SENSOR_INTERVAL_TICKS === 0
+          ? scanEyeSensor(
               activeField,
               advanced.position,
               advanced.angle,
-              current.sensorRadius,
+              current.eyeSensorRadius,
               tick,
             )
-          : current.sensor;
+          : current.eyeSensor;
 
       current = {
         tick,
@@ -260,20 +294,20 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         },
         hull,
         invulnerableTicksRemaining,
-        thrusters: { left: action.left, right: action.right },
+        thrusters: { left: action.left, right: action.right, rear: action.rear },
         outcome,
         progress,
-        sensorRadius: current.sensorRadius,
-        sensor,
+        eyeSensorRadius: current.eyeSensorRadius,
+        eyeSensor,
       };
 
       return getState();
     },
-    setSensorRadius: (radius: number): void => {
-      configuredSensorRadius = clampSensorRadius(radius);
+    setEyeSensorRadius: (radius: number): void => {
+      configuredEyeSensorRadius = clampEyeSensorRadius(radius);
       current = {
         ...current,
-        sensorRadius: configuredSensorRadius,
+        eyeSensorRadius: configuredEyeSensorRadius,
       };
     },
     reset: (seed?: number): SimState => {
@@ -283,7 +317,7 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       current = initialCurrent(
         bodyTemplate,
         hullTemplate,
-        configuredSensorRadius,
+        configuredEyeSensorRadius,
         activeField,
       );
       return getState();

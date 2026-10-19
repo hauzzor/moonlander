@@ -18,22 +18,9 @@ compile error. Unit tests run in Node.
 ## Simulation API
 
 ```ts
-import { createSimulation, type Controller } from "@moonlander/sim";
+import { createAutopilot, createSimulation } from "@moonlander/sim";
 
-const controller: Controller = {
-  act(observation) {
-    const belowCenter = observation.tunnelCenterOffset < -2;
-    const aboveCenter = observation.tunnelCenterOffset > 2;
-    const forwardClearance = observation.sensor.distances[0];
-
-    return {
-      left:
-        belowCenter || forwardClearance < 20 || observation.forwardSpeed < 6,
-      right: aboveCenter || forwardClearance < 20 || observation.hull < 50,
-    };
-  },
-};
-
+const controller = createAutopilot();
 const simulation = createSimulation({ seed: 1234 });
 let state = simulation.getState();
 
@@ -42,6 +29,11 @@ while (state.outcome === "flying") {
   state = simulation.step(controller.act(observation));
 }
 ```
+
+Manual controllers return `{ left, right, rear }`. Controller inputs include
+the full observation, including the eye, direction, distance-to-start, and
+velocity sensors. The reference autopilot is deterministic and safety-first;
+it maximizes progress and speed within its empirical zero-contact benchmark.
 
 `step` advances exactly one fixed tick (`FIXED_DT = 1 / 120`). The same seed,
 initial state, and action sequence produce the same state sequence and the same
@@ -60,36 +52,42 @@ tunnel.
 | `hull` | Remaining hull, `0..100` |
 | `progress` | Maximum forward x-distance from spawn in meters |
 | `score` | `floor(progress)` |
-| `nearestWallDistance` | Hull-surface distance to the nearest tunnel wall, capped at `SENSOR_RANGE`; may be negative during penetration |
+| `nearestWallDistance` | Hull-surface distance to the nearest tunnel wall, capped at `WALL_SENSOR_RANGE`; may be negative during penetration |
 | `tunnelCenterOffset` | Signed vertical offset from the tunnel centerline, positive above |
 | `tunnelHalfWidth` | Half the tunnel width in meters |
 | `tunnelHeading` | Centerline tangent angle in radians |
 | `forwardSpeed` | Velocity projected onto the tunnel tangent |
 | `lateralSpeed` | Velocity projected onto the tunnel normal |
-| `sensorRadius` | Configured radar view radius in meters |
-| `sensor` | Last 360-ray ship-relative radar reading |
+| `eyeSensorRadius` | Configured eye view radius in meters |
+| `sensors` | Four-block sensor suite: eye, direction, distance-to-start, velocity |
 
 All values are finite. The Starship collision capsule has radius 9 m and
 half-length 15 m. The tunnel is 68 m wide and has no ground plane or gates.
 
-### Ship sensor
+### Ship sensors
 
-The sensor is mounted at the ship center and produces a `SensorReading`:
+The `sensors` suite contains:
 
-- `radius` — view radius used for that scan.
-- `tick` — simulation tick at which the scan was produced.
-- `origin` — ship center at the scan.
-- `heading` — ship angle at the scan.
-- `distances` — exactly 360 values. Index `i` is the ship-relative angle
-  `i` degrees, where `0°` is the nose and angles increase counter-clockwise.
-  Each value is the distance to the nearest tunnel wall surface, or `radius`
-  when no wall was hit within range.
+- `eye` — `EyeSensorReading` with `radius`, `tick`, `origin` (ship center at
+  scan), `heading` (ship angle at scan), and 360 `distances`.
+  - Rays use absolute world angles: index `i` is world angle `i°`, `0°` right,
+    counter-clockwise.
+  - Each ray starts at the ship hull rim and stores the distance from that rim
+    toward the wall. The wall distance subtracts `WALL_RADIUS` from the
+    centerline hit along the ray (exact for perpendicular hits, approximate at
+    oblique angles). No hit stores the view radius. Use `nearestWallDistance`
+    for immediate hull-surface safety.
+  - Scans occur at tick 0 and every second. `eyeSensorRadius` defaults to 120 m,
+    is bounded to `20..200 m`, and `setEyeSensorRadius` applies at the next
+    scan. The configured radius persists across reset.
+- `direction.angle` — ship angle to the world horizon, normalized to `-π..π`.
+- `distanceToStart` — Euclidean distance from the spawn position in meters.
+- `velocity` — world `vx`, `vy`, `speed`, and velocity direction.
 
-Scans occur at tick 0 and every second (120 ticks). The configured view radius
-is `sensorRadius`, default 120 m, bounded to `20..200 m`. `setSensorRadius`
-updates the configured value; the next scheduled scan uses it, while the
-previous reading remains available until then. The configured radius persists
-across reset/seed changes.
+`createAutopilot()` is a deterministic controller that uses this full
+observation. It exclusively controls all three thrusters while enabled, is
+toggled by E in the game, and targets zero wall contact over its empirical
+benchmark.
 
 ## Model lifecycle
 
@@ -97,8 +95,8 @@ across reset/seed changes.
 - The default seed is `1`; seeds are unsigned 32-bit integers.
 - `reset(seed?)` restores the configured start and hull. Without a pinned
   field, it regenerates the tunnel when a seed is provided and reuses the
-  current seed otherwise. The configured sensor radius persists.
-- `setSensorRadius(radius)` clamps the configured radar view radius. The next
+  current seed otherwise. The configured eye radius persists.
+- `setEyeSensorRadius(radius)` clamps the configured eye view radius. The next
   scheduled scan uses it; the previous reading remains until then.
 - `SimulationOptions.field` pins a field for the simulation lifetime. It is
   useful for deterministic tests and custom tunnels; `reset` keeps it.
@@ -128,11 +126,11 @@ across reset/seed changes.
 npm.cmd run sim:demo
 ```
 
-This runs a deterministic, non-trained controller in Node. It prints finite
-telemetry every five seconds, including the radar scan tick, configured and
-last-scan radius, minimum sensor distance, and forward-ray distance. It prints
-the final outcome, seed, progress, and score. It is a baseline for the
-controller interface, not a training implementation.
+This runs the deterministic autopilot in Node. It prints finite telemetry every
+five seconds, including eye scan data, direction, distance to start, velocity,
+minimum wall clearance, and forward speed. It prints the final outcome, seed,
+progress, and score. It is a baseline for the controller interface, not a
+training implementation.
 
 ## Training loop shape
 
@@ -152,5 +150,5 @@ while (state.outcome === "flying") {
 ```
 
 Rewards and termination can be derived from progress, forward speed, centerline
-offset, hull remaining, impact damage, radar clearances, and the final score.
-No renderer or browser is required.
+offset, hull remaining, impact damage, eye clearances, navigation sensors, and
+the final score. No renderer or browser is required.

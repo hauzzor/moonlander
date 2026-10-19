@@ -1,9 +1,10 @@
 # Moonlander
 
 A 2D side-view Starship endless-tunnel game. Fire two aggressive canted
-thrusters to fly manually through a seeded, enclosed tunnel that winds
-rightward. Atmospheric drag makes inputs responsive and damped. Thrust is
-unlimited; the hull is not.
+thrusters and a rear booster to fly through a seeded, enclosed tunnel that
+winds rightward. Atmospheric drag makes inputs responsive and damped. An
+eye sensor, navigation sensors, and an optional autopilot support manual and
+autonomous flight. Thrust is unlimited; the hull is not.
 
 Play: https://hauzzor.github.io/moonlander/
 
@@ -11,11 +12,15 @@ Play: https://hauzzor.github.io/moonlander/
 
 - `Q` — fire the left thruster (upward and rightward force, clockwise torque)
 - `W` — fire the right thruster (upward and leftward force, counter-clockwise torque)
+- `Space` — toggle the rear booster on/off
+- `E` — toggle the autopilot on/off
 - `R` — start a new run with a new seed
 - Seed field — enter an unsigned 32-bit seed and load it to replay a tunnel
-- View radius slider — adjust the 360° radar range from 20 to 200 m
+- View radius slider — adjust the eye sensor range from 20 to 200 m
 
-Both thrusters together produce balanced vertical lift. There is no fuel.
+Both bottom thrusters together produce balanced vertical lift. The rear booster
+is half the strength of one bottom thruster and produces no torque. There is no
+fuel.
 
 ## Rules
 
@@ -30,10 +35,15 @@ Both thrusters together produce balanced vertical lift. There is no fuel.
 - Score is `floor(progress)`.
 - There are no gates or free obstacles; the tunnel floor and ceiling are the
   only collision surfaces.
-- A ship-relative 360° radar scans once per second and shows the distance to
-  the tunnel wall in every direction. The radar view radius defaults to 120 m
-  and is adjustable from 20 to 200 m. The bottom-right chart shows distance on
-  the Y axis and angle on the X axis.
+- The eye sensor scans 360 absolute world directions once per second. Each ray
+  starts at the ship hull rim and reports the distance to the tunnel wall.
+  The view radius defaults to 120 m and is adjustable from 20 to 200 m. The
+  bottom-right chart shows distance on the Y axis and world angle on the X axis.
+- The navigation console also shows a signed direction-to-horizon needle,
+  distance from spawn, and the velocity vector.
+- The autopilot uses all sensors and the continuous tunnel state, prioritizes
+  zero wall contact, and targets maximum safe progress and speed. It is toggled
+  with E.
 
 The tunnel is 68 m wide, enclosed, and endless in both directions. The first
 120 m is straight, then the seeded centerline bends gently rightward. The same
@@ -49,8 +59,9 @@ seed and actions produce the same run.
 - `.github/workflows/ci.yml` — verification, GitHub Pages deployment, and live
   browser tests against the deployed URL.
 
-The simulation is fixed at 120 Hz with a seeded endless tunnel and exposes
-observations and a `Controller` interface for autonomous control experiments:
+The simulation is fixed at 120 Hz with a seeded endless tunnel and exposes a
+four-block sensor suite, observations, and a deterministic autopilot
+`Controller` for autonomous control experiments:
 [`docs/autonomy.md`](docs/autonomy.md).
 
 ## Change workflow

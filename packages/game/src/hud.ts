@@ -2,7 +2,7 @@ import type { SimState } from "@moonlander/sim";
 import { getHudElement } from "./dom";
 
 export interface HudController {
-  update(state: SimState): void;
+  update(state: SimState, autopilotActive: boolean): void;
 }
 
 function setHudValue(
@@ -24,6 +24,9 @@ export function createHud(): HudController {
   const hudScore = getHudElement("hud-score");
   const thrusterLeft = getHudElement("thruster-left");
   const thrusterRight = getHudElement("thruster-right");
+  const thrusterRear = getHudElement("thruster-rear");
+  const autopilotStatus = getHudElement("autopilot-status");
+  const autopilotValue = autopilotStatus.querySelector(".autopilot-value");
   const seedDisplay = getHudElement("seed-display");
   const outcome = getHudElement("outcome");
   const outcomeText = outcome.querySelector(".outcome-text");
@@ -47,11 +50,13 @@ export function createHud(): HudController {
   };
 
   return {
-    update(state: SimState): void {
+    update(state: SimState, autopilotActive: boolean): void {
       const speed = Math.hypot(state.ship.velocity.x, state.ship.velocity.y);
       const progress = Math.max(0, Math.floor(state.progress));
-      const leftActive = state.outcome === "flying" && state.thrusters.left;
-      const rightActive = state.outcome === "flying" && state.thrusters.right;
+      const flying = state.outcome === "flying";
+      const leftActive = flying && state.thrusters.left;
+      const rightActive = flying && state.thrusters.right;
+      const rearActive = flying && state.thrusters.rear;
 
       setHudValue(hudHull, String(state.hull), String(Math.round(state.hull)));
       setHudValue(hudSpeed, String(speed), speed.toFixed(1));
@@ -60,7 +65,16 @@ export function createHud(): HudController {
 
       thrusterLeft.setAttribute("data-active", String(leftActive));
       thrusterRight.setAttribute("data-active", String(rightActive));
+      thrusterRear.setAttribute("data-active", String(rearActive));
       hudHull.classList.toggle("hud-critical", state.hull <= 30);
+
+      autopilotStatus.setAttribute("data-active", String(autopilotActive));
+      autopilotStatus.classList.toggle("autopilot-on", autopilotActive);
+      if (autopilotValue instanceof HTMLElement) {
+        autopilotValue.textContent = autopilotActive
+          ? "AUTOPILOT"
+          : "MANUAL";
+      }
 
       seedDisplay.textContent = String(state.seed);
       updateOutcome(state);

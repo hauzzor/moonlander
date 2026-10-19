@@ -158,28 +158,30 @@ test("on-screen instructions mention Q, W, R, and the tunnel but not gates", asy
   await expect(instructions).toBeVisible();
   await expect(instructions).toContainText(/\bQ\b/i);
   await expect(instructions).toContainText(/\bW\b/i);
+  await expect(instructions).toContainText(/\bSpace\b/i);
+  await expect(instructions).toContainText(/\bE\b/i);
   await expect(instructions).toContainText(/\bR\b/i);
   await expect(instructions).toContainText(/tunnel/i);
   await expect(instructions).not.toContainText(/gates/i);
 });
 
-test("sensor panel and chart canvas are visible with rendered data", async ({ page }) => {
+test("eye sensor panel and chart canvas are visible with rendered data", async ({ page }) => {
   await page.goto("./");
 
-  await expect(page.getByTestId("sensor-panel")).toBeVisible();
+  await expect(page.getByTestId("eye-sensor-panel")).toBeVisible();
 
-  const chart = page.getByTestId("sensor-chart");
+  const chart = page.getByTestId("eye-sensor-chart");
   await expect(chart).toBeVisible();
   expect(await hasNonBackgroundPixels(chart)).toBe(true);
 });
 
-test("sensor radius slider has the configured range and updates its readout", async ({ page }) => {
+test("eye sensor radius slider has the configured range and updates its readout", async ({ page }) => {
   await page.goto("./");
 
-  await expect(page.getByTestId("sensor-panel")).toBeVisible();
+  await expect(page.getByTestId("eye-sensor-panel")).toBeVisible();
 
-  const slider = page.getByTestId("sensor-radius");
-  const radiusValue = page.getByTestId("sensor-radius-value");
+  const slider = page.getByTestId("eye-sensor-radius");
+  const radiusValue = page.getByTestId("eye-sensor-radius-value");
   await expect(slider).toHaveAttribute("min", "20");
   await expect(slider).toHaveAttribute("max", "200");
   await expect(slider).toHaveAttribute("step", "5");
@@ -196,35 +198,122 @@ test("sensor radius slider has the configured range and updates its readout", as
   await expect(radiusValue).toContainText("80");
 });
 
-test("sensor chart reflects the updated radius at the next scan", async ({ page }) => {
+test("eye sensor chart reflects the updated radius at the next scan", async ({ page }) => {
   await page.goto("./");
 
-  await expect(page.getByTestId("sensor-panel")).toBeVisible();
+  await expect(page.getByTestId("eye-sensor-panel")).toBeVisible();
 
-  const chart = page.getByTestId("sensor-chart");
+  const chart = page.getByTestId("eye-sensor-chart");
+  const scanTickDisplay = page.getByTestId("eye-sensor-scan-tick");
+  await expect(scanTickDisplay).toBeVisible();
   const initialScanTickValue = await chart.getAttribute("data-scan-tick");
   expect(initialScanTickValue).not.toBeNull();
   const initialScanTick = Number(initialScanTickValue);
   expect(Number.isFinite(initialScanTick)).toBe(true);
+  const initialScanTickText = await scanTickDisplay.innerText();
   await expect(chart).toHaveAttribute("data-scan-radius", "120");
 
-  const slider = page.getByTestId("sensor-radius");
+  const slider = page.getByTestId("eye-sensor-radius");
   await slider.focus();
   for (let step = 0; step < 8; step++) {
     await slider.press("ArrowLeft");
   }
-  await expect(page.getByTestId("sensor-radius-value")).toContainText("80");
+  await expect(page.getByTestId("eye-sensor-radius-value")).toContainText("80");
 
   await expect
     .poll(
       async () => {
         const scanTick = Number(await chart.getAttribute("data-scan-tick"));
         const scanRadius = await chart.getAttribute("data-scan-radius");
-        return scanTick > initialScanTick && scanRadius === "80";
+        const scanTickText = await scanTickDisplay.innerText();
+        return (
+          scanTick > initialScanTick &&
+          scanRadius === "80" &&
+          scanTickText !== initialScanTickText
+        );
       },
       { timeout: 4_000 },
     )
     .toBe(true);
+});
+
+test("direction sensor needle and degree readout are visible", async ({ page }) => {
+  await page.goto("./");
+
+  await expect(page.getByTestId("direction-needle")).toBeVisible();
+
+  const directionValue = page.getByTestId("direction-value");
+  await expect(directionValue).toBeVisible();
+  await expect(directionValue).toContainText(/[-+]?\d+(?:\.\d+)?\s*(?:°|deg(?:rees)?)/i);
+});
+
+test("distance and velocity sensor blocks show numeric values", async ({ page }) => {
+  await page.goto("./");
+
+  const numericValue = /[-+]?(?:\d+(?:\.\d*)?|\.\d+)/;
+  for (const testId of [
+    "distance-to-start",
+    "velocity-speed",
+    "velocity-vx",
+    "velocity-vy",
+    "velocity-angle",
+  ]) {
+    const sensorValue = page.getByTestId(testId);
+    await expect(sensorValue).toBeVisible();
+    await expect(sensorValue).toContainText(numericValue);
+  }
+});
+
+test("Space toggles the rear thruster and R resets it off", async ({ page }) => {
+  await page.goto("./");
+
+  const rearThruster = page.getByTestId("thruster-rear");
+  await expect(rearThruster).toHaveAttribute("data-active", "false");
+
+  await page.keyboard.press("Space");
+  await expect(rearThruster).toHaveAttribute("data-active", "true");
+
+  await page.keyboard.press("Space");
+  await expect(rearThruster).toHaveAttribute("data-active", "false");
+
+  await page.keyboard.press("Space");
+  await expect(rearThruster).toHaveAttribute("data-active", "true");
+
+  await page.keyboard.press("r");
+  await expect(rearThruster).toHaveAttribute("data-active", "false");
+});
+
+test("E toggles autopilot status between MANUAL and AUTOPILOT", async ({ page }) => {
+  await page.goto("./");
+
+  const autopilotStatus = page.getByTestId("autopilot-status");
+  await expect(autopilotStatus).toBeVisible();
+  await expect(autopilotStatus).toHaveAttribute("data-active", "false");
+  await expect(autopilotStatus).toContainText("MANUAL");
+
+  await page.keyboard.press("e");
+  await expect(autopilotStatus).toHaveAttribute("data-active", "true");
+  await expect(autopilotStatus).toContainText("AUTOPILOT");
+
+  await page.keyboard.press("e");
+  await expect(autopilotStatus).toHaveAttribute("data-active", "false");
+  await expect(autopilotStatus).toContainText("MANUAL");
+});
+
+test("autopilot increases progress while active", async ({ page }) => {
+  await page.goto("./");
+
+  const progress = page.getByTestId("hud-progress");
+  const initialProgress = await readNumericDataValue(progress);
+  const autopilotStatus = page.getByTestId("autopilot-status");
+
+  await page.keyboard.press("e");
+  await expect(autopilotStatus).toHaveAttribute("data-active", "true");
+  await expect(autopilotStatus).toContainText("AUTOPILOT");
+
+  await expect
+    .poll(() => readNumericDataValue(progress), { timeout: 10_000 })
+    .toBeGreaterThan(initialProgress);
 });
 
 test("progress increases while holding Q", async ({ page }) => {

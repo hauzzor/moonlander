@@ -1,14 +1,15 @@
 import {
-  SENSOR_RAY_COUNT,
-  SENSOR_VIEW_DEFAULT,
-  SENSOR_VIEW_MAX,
-  SENSOR_VIEW_MIN,
-  type SensorReading,
+  EYE_SENSOR_RAY_COUNT,
+  EYE_SENSOR_VIEW_DEFAULT,
+  EYE_SENSOR_VIEW_MAX,
+  EYE_SENSOR_VIEW_MIN,
+  type EyeSensorReading,
+  type SensorSuite,
   type SimState,
 } from "@moonlander/sim";
 import { getElement, getHudElement } from "./dom";
 
-const SENSOR_VIEW_STEP = 5;
+const EYE_SENSOR_VIEW_STEP = 5;
 const CHART_BACKGROUND = "#071018";
 const CHART_LEFT = 34;
 const CHART_RIGHT = 14;
@@ -17,12 +18,12 @@ const CHART_BOTTOM = 18;
 const ANGLE_TICKS = [0, 90, 180, 270, 360] as const;
 const RADIUS_TICKS = [0, 0.25, 0.5, 0.75, 1] as const;
 
-export interface SensorPanelOptions {
-  getSensorRadius(): number;
-  setSensorRadius(radius: number): void;
+export interface SensorConsoleOptions {
+  getEyeSensorRadius(): number;
+  setEyeSensorRadius(radius: number): void;
 }
 
-export interface SensorPanelController {
+export interface SensorConsoleController {
   update(state: SimState): void;
   resize(): void;
 }
@@ -31,10 +32,25 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function formatSigned(value: number, decimals: number): string {
+  const rounded = Math.abs(value) < 0.5 / 10 ** decimals ? 0 : value;
+  const fixed = rounded.toFixed(decimals);
+  return rounded > 0 ? `+${fixed}` : fixed;
+}
+
+function setOutput(
+  element: HTMLElement,
+  text: string,
+  value: number,
+): void {
+  element.textContent = text;
+  element.setAttribute("data-value", String(value));
+}
+
 function drawChart(
   ctx: CanvasRenderingContext2D,
   chart: HTMLCanvasElement,
-  reading: SensorReading,
+  reading: EyeSensorReading,
 ): void {
   const cssWidth = Math.max(1, chart.clientWidth);
   const cssHeight = Math.max(1, chart.clientHeight);
@@ -104,11 +120,11 @@ function drawChart(
 
   const points: { x: number; y: number }[] = [];
 
-  for (let index = 0; index < SENSOR_RAY_COUNT; index += 1) {
+  for (let index = 0; index < EYE_SENSOR_RAY_COUNT; index += 1) {
     const distance = reading.distances[index] ?? radius;
     const fraction = clamp(distance / radius, 0, 1);
     points.push({
-      x: xForAngle((index / SENSOR_RAY_COUNT) * 360),
+      x: xForAngle((index / EYE_SENSOR_RAY_COUNT) * 360),
       y: yForFraction(fraction),
     });
   }
@@ -141,38 +157,45 @@ function drawChart(
   ctx.stroke();
 }
 
-export function createSensorPanel(
-  options: SensorPanelOptions,
-): SensorPanelController {
+export function createSensorConsole(
+  options: SensorConsoleOptions,
+): SensorConsoleController {
   const chart = getElement(
-    '[data-testid="sensor-chart"]',
+    '[data-testid="eye-sensor-chart"]',
     HTMLCanvasElement,
   );
   const context = chart.getContext("2d");
   if (context === null) {
-    throw new Error("Could not acquire sensor chart context");
+    throw new Error("Could not acquire eye sensor chart context");
   }
 
   const slider = getElement(
-    '[data-testid="sensor-radius"]',
+    '[data-testid="eye-sensor-radius"]',
     HTMLInputElement,
   );
-  const radiusValue = getHudElement("sensor-radius-value");
-  const scanTick = getHudElement("sensor-scan-tick");
+  const radiusValue = getHudElement("eye-sensor-radius-value");
+  const scanTick = getHudElement("eye-sensor-scan-tick");
+  const directionNeedle = getHudElement("direction-needle");
+  const directionValue = getHudElement("direction-value");
+  const distanceToStart = getHudElement("distance-to-start");
+  const velocitySpeed = getHudElement("velocity-speed");
+  const velocityVx = getHudElement("velocity-vx");
+  const velocityVy = getHudElement("velocity-vy");
+  const velocityAngle = getHudElement("velocity-angle");
 
-  slider.min = String(SENSOR_VIEW_MIN);
-  slider.max = String(SENSOR_VIEW_MAX);
-  slider.step = String(SENSOR_VIEW_STEP);
+  slider.min = String(EYE_SENSOR_VIEW_MIN);
+  slider.max = String(EYE_SENSOR_VIEW_MAX);
+  slider.step = String(EYE_SENSOR_VIEW_STEP);
 
-  const configuredRadius = options.getSensorRadius();
+  const configuredRadius = options.getEyeSensorRadius();
   let displayedRadius = clamp(
     Number.isFinite(configuredRadius)
       ? configuredRadius
-      : SENSOR_VIEW_DEFAULT,
-    SENSOR_VIEW_MIN,
-    SENSOR_VIEW_MAX,
+      : EYE_SENSOR_VIEW_DEFAULT,
+    EYE_SENSOR_VIEW_MIN,
+    EYE_SENSOR_VIEW_MAX,
   );
-  let lastReading: SensorReading | null = null;
+  let lastReading: EyeSensorReading | null = null;
   let lastScanKey: string | null = null;
   let lastChartWidth = -1;
   let lastChartHeight = -1;
@@ -188,9 +211,9 @@ export function createSensorPanel(
 
   slider.addEventListener("input", () => {
     const value = Number(slider.value);
-    options.setSensorRadius(value);
+    options.setEyeSensorRadius(value);
     setRadiusReadout(
-      clamp(value, SENSOR_VIEW_MIN, SENSOR_VIEW_MAX),
+      clamp(value, EYE_SENSOR_VIEW_MIN, EYE_SENSOR_VIEW_MAX),
     );
   });
 
@@ -205,7 +228,7 @@ export function createSensorPanel(
     drawChart(context, chart, lastReading);
   };
 
-  const applyReading = (reading: SensorReading): void => {
+  const applyReading = (reading: EyeSensorReading): void => {
     lastReading = reading;
     chart.setAttribute("data-scan-tick", String(reading.tick));
     chart.setAttribute("data-scan-radius", String(reading.radius));
@@ -213,20 +236,62 @@ export function createSensorPanel(
     drawCurrentReading();
   };
 
+  const updateNavigation = (sensors: SensorSuite): void => {
+    const directionDegrees =
+      (sensors.direction.angle * 180) / Math.PI;
+    directionNeedle.style.setProperty(
+      "--needle-angle",
+      `${-directionDegrees}deg`,
+    );
+    setOutput(
+      directionValue,
+      `${formatSigned(directionDegrees, 1)}\u00b0`,
+      directionDegrees,
+    );
+
+    setOutput(
+      distanceToStart,
+      `${sensors.distanceToStart.toFixed(1)} m`,
+      sensors.distanceToStart,
+    );
+
+    const velocity = sensors.velocity;
+    setOutput(
+      velocitySpeed,
+      `${velocity.speed.toFixed(1)} m/s`,
+      velocity.speed,
+    );
+    setOutput(
+      velocityVx,
+      `${formatSigned(velocity.vx, 1)} m/s`,
+      velocity.vx,
+    );
+    setOutput(
+      velocityVy,
+      `${formatSigned(velocity.vy, 1)} m/s`,
+      velocity.vy,
+    );
+
+    const velocityDegrees = (velocity.angle * 180) / Math.PI;
+    setOutput(
+      velocityAngle,
+      `${formatSigned(velocityDegrees, 1)}\u00b0`,
+      velocityDegrees,
+    );
+  };
+
   return {
     update(state: SimState): void {
-      if (state.sensorRadius !== displayedRadius) {
-        setRadiusReadout(state.sensorRadius);
+      if (state.eyeSensorRadius !== displayedRadius) {
+        setRadiusReadout(state.eyeSensorRadius);
       }
 
-      const scanKey = `${state.seed}:${state.sensor.tick}:${state.sensor.radius}`;
+      const reading = state.sensors.eye;
+      const scanKey = `${state.seed}:${reading.tick}:${reading.radius}`;
       if (scanKey !== lastScanKey) {
         lastScanKey = scanKey;
-        applyReading(state.sensor);
-        return;
-      }
-
-      if (
+        applyReading(reading);
+      } else if (
         lastReading !== null &&
         (chart.clientWidth !== lastChartWidth ||
           chart.clientHeight !== lastChartHeight ||
@@ -234,6 +299,8 @@ export function createSensorPanel(
       ) {
         drawCurrentReading();
       }
+
+      updateNavigation(state.sensors);
     },
 
     resize(): void {

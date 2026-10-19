@@ -2,11 +2,13 @@ export type {
   Action,
   Controller,
   CurvedWall,
+  DirectionSensorReading,
+  EyeSensorReading,
   Field,
   FieldChunk,
   Observation,
   RunOutcome,
-  SensorReading,
+  SensorSuite,
   ShipStart,
   ShipState,
   Simulation,
@@ -14,6 +16,7 @@ export type {
   SimState,
   Tunnel,
   Vec2,
+  VelocitySensorReading,
 } from "./types";
 
 export {
@@ -22,6 +25,11 @@ export {
   DAMAGE_SCALE,
   DAMAGE_SPEED_THRESHOLD,
   DEFAULT_SEED,
+  EYE_SENSOR_INTERVAL_SECONDS,
+  EYE_SENSOR_RAY_COUNT,
+  EYE_SENSOR_VIEW_DEFAULT,
+  EYE_SENSOR_VIEW_MAX,
+  EYE_SENSOR_VIEW_MIN,
   FIELD_CHUNK_SIZE,
   FIXED_DT,
   GRAVITY,
@@ -29,13 +37,9 @@ export {
   INVULNERABILITY_SECONDS,
   LEFT_MOUNT,
   LINEAR_DRAG,
+  REAR_MOUNT,
+  REAR_THRUSTER_FORCE,
   RIGHT_MOUNT,
-  SENSOR_INTERVAL_SECONDS,
-  SENSOR_RANGE,
-  SENSOR_RAY_COUNT,
-  SENSOR_VIEW_DEFAULT,
-  SENSOR_VIEW_MAX,
-  SENSOR_VIEW_MIN,
   SHIP_CAPSULE_HALF_LENGTH,
   SHIP_HEIGHT,
   SHIP_INERTIA,
@@ -52,7 +56,9 @@ export {
   TUNNEL_SAMPLE_STEP,
   TUNNEL_START_STRAIGHT,
   WALL_RADIUS,
+  WALL_SENSOR_RANGE,
 } from "./constants";
 
+export { createAutopilot } from "./autopilot";
 export { createField } from "./field";
 export { createSimulation } from "./simulation";

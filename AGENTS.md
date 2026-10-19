@@ -10,13 +10,14 @@
 
 ## Product
 
-Moonlander is a 2D side-view Starship endless-tunnel game. The player fires two
-aggressive canted thrusters (Q = left, W = right) to fly manually through a
-seeded, enclosed tunnel that winds rightward. Atmospheric drag damps motion for
-responsive control, while hull damage and tunnel collisions create the
-challenge. A ship-relative 360° radar scans the tunnel once per second. Fuel is
-unlimited. The simulation is deterministic and headless so it can later be used
-to train and evaluate autonomous controllers.
+Moonlander is a 2D side-view Starship endless-tunnel game. The player flies
+through a seeded, enclosed tunnel that winds rightward using two aggressive
+canted thrusters (Q = left, W = right), a rear booster (Space), and an optional
+autopilot (E). Atmospheric drag damps motion for responsive control, while hull
+damage and tunnel collisions create the challenge. An absolute-angle rim-based
+eye sensor plus direction, distance-to-start, and velocity sensors support manual
+and autonomous flight. Fuel is unlimited. The simulation is deterministic and
+headless so it can later be used to train and evaluate autonomous controllers.
 
 Repository: https://github.com/hauzzor/moonlander
 Live game: https://hauzzor.github.io/moonlander/

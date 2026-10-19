@@ -25,22 +25,28 @@ const observationKeys = [
   "tunnelHeading",
   "forwardSpeed",
   "lateralSpeed",
-  "sensorRadius",
-  "sensor",
+  "eyeSensorRadius",
+  "sensors",
 ].sort();
 
 function expectFiniteObservation(observation: Observation): void {
-  const { sensor, ...numericFields } = observation;
-  expect(observation.sensorRadius).toBeDefined();
-  expect(sensor).toBeDefined();
+  const { sensors, ...numericFields } = observation;
+  expect(observation.eyeSensorRadius).toBeDefined();
+  expect(sensors).toBeDefined();
   expect(Object.values(numericFields).every(Number.isFinite)).toBe(true);
-  expect(Number.isFinite(sensor.radius)).toBe(true);
-  expect(Number.isFinite(sensor.tick)).toBe(true);
-  expect(Number.isFinite(sensor.heading)).toBe(true);
-  expect(Number.isFinite(sensor.origin.x)).toBe(true);
-  expect(Number.isFinite(sensor.origin.y)).toBe(true);
-  expect(sensor.distances).toHaveLength(sim.SENSOR_RAY_COUNT);
-  expect(sensor.distances.every(Number.isFinite)).toBe(true);
+  expect(Number.isFinite(sensors.eye.radius)).toBe(true);
+  expect(Number.isFinite(sensors.eye.tick)).toBe(true);
+  expect(Number.isFinite(sensors.eye.heading)).toBe(true);
+  expect(Number.isFinite(sensors.eye.origin.x)).toBe(true);
+  expect(Number.isFinite(sensors.eye.origin.y)).toBe(true);
+  expect(sensors.eye.distances).toHaveLength(sim.EYE_SENSOR_RAY_COUNT);
+  expect(sensors.eye.distances.every(Number.isFinite)).toBe(true);
+  expect(Number.isFinite(sensors.direction.angle)).toBe(true);
+  expect(Number.isFinite(sensors.distanceToStart)).toBe(true);
+  expect(Number.isFinite(sensors.velocity.vx)).toBe(true);
+  expect(Number.isFinite(sensors.velocity.vy)).toBe(true);
+  expect(Number.isFinite(sensors.velocity.speed)).toBe(true);
+  expect(Number.isFinite(sensors.velocity.angle)).toBe(true);
 }
 
 describe("tunnel-aware autonomy observation API", () => {
@@ -65,8 +71,8 @@ describe("tunnel-aware autonomy observation API", () => {
       tunnelHeading: 0,
       forwardSpeed: 0,
       lateralSpeed: 0,
-      sensorRadius: sim.SENSOR_VIEW_DEFAULT,
-      sensor: simulation.getState().sensor,
+      eyeSensorRadius: sim.EYE_SENSOR_VIEW_DEFAULT,
+      sensors: simulation.getState().sensors,
     });
     expectFiniteObservation(observation);
     for (const removedField of [
@@ -77,6 +83,8 @@ describe("tunnel-aware autonomy observation API", () => {
       "altitude",
       "padOffsetX",
       "pad",
+      "sensor",
+      "sensorRadius",
     ]) {
       expect(removedField in observation).toBe(false);
     }
@@ -121,7 +129,7 @@ describe("tunnel-aware autonomy observation API", () => {
     expectFiniteObservation(observation);
   });
 
-  it("measures nearest wall distance from the hull surface and uses SENSOR_RANGE without walls", () => {
+  it("measures nearest wall distance from the hull surface and uses WALL_SENSOR_RANGE without walls", () => {
     const straight = createSimulationWithField(createControlledField()).getObservation();
     const wide = createSimulationWithField(createWideTunnelField()).getObservation();
 
@@ -129,14 +137,18 @@ describe("tunnel-aware autonomy observation API", () => {
       sim.TUNNEL_HALF_WIDTH - sim.SHIP_RADIUS - sim.WALL_RADIUS,
       12,
     );
-    expect(wide.nearestWallDistance).toBe(sim.SENSOR_RANGE);
+    expect(wide.nearestWallDistance).toBe(sim.WALL_SENSOR_RANGE);
   });
 
   it("keeps observations finite and synchronized with state across steps", () => {
     const simulation = createSimulationWithField(createWideTunnelField());
     const before = simulation.getObservation();
 
-    for (const action of [bothThrusters, noThrusters, { left: true, right: false }]) {
+    for (const action of [
+      bothThrusters,
+      noThrusters,
+      { left: true, right: false, rear: false },
+    ]) {
       const state = simulation.step(action);
       const observation = simulation.getObservation();
       expectFiniteObservation(observation);
@@ -159,6 +171,7 @@ describe("tunnel-aware autonomy observation API", () => {
         return {
           left: observation.tunnelCenterOffset < -2 || observation.lateralSpeed < -0.5,
           right: observation.tunnelCenterOffset > 2 || observation.nearestWallDistance < 8,
+          rear: observation.forwardSpeed < 8 && observation.nearestWallDistance > 12,
         };
       },
     };

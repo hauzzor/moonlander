@@ -20,17 +20,27 @@ function makeState(
     ship: { position, velocity, angle: 0, angularVelocity: 0 },
     hull: 100,
     invulnerable: false,
-    thrusters: { left: false, right: false },
+    thrusters: { left: false, right: false, rear: false },
     outcome: "flying",
     score: 0,
     progress: 0,
-    sensorRadius: 120,
-    sensor: {
-      radius: 120,
-      tick: 0,
-      origin: position,
-      heading: 0,
-      distances: Array.from({ length: 360 }, () => 120),
+      eyeSensorRadius: 120,
+      sensors: {
+        eye: {
+          radius: 120,
+          tick: 0,
+          origin: position,
+          heading: 0,
+          distances: Array.from({ length: 360 }, () => 120),
+        },
+      direction: { angle: 0 },
+      distanceToStart: 0,
+      velocity: {
+        vx: velocity.x,
+        vy: velocity.y,
+        speed: Math.hypot(velocity.x, velocity.y),
+        angle: Math.atan2(velocity.y, velocity.x),
+      },
     },
   };
 }

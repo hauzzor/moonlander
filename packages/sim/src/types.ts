@@ -6,6 +6,7 @@ export interface Vec2 {
 export interface Action {
   left: boolean;
   right: boolean;
+  rear: boolean;
 }
 
 export type RunOutcome = "flying" | "destroyed";
@@ -17,12 +18,30 @@ export interface ShipState {
   angularVelocity: number;
 }
 
-export interface SensorReading {
+export interface EyeSensorReading {
   radius: number;
   tick: number;
   origin: Vec2;
   heading: number;
   distances: readonly number[];
+}
+
+export interface DirectionSensorReading {
+  angle: number;
+}
+
+export interface VelocitySensorReading {
+  vx: number;
+  vy: number;
+  speed: number;
+  angle: number;
+}
+
+export interface SensorSuite {
+  eye: EyeSensorReading;
+  direction: DirectionSensorReading;
+  distanceToStart: number;
+  velocity: VelocitySensorReading;
 }
 
 export interface SimState {
@@ -36,8 +55,8 @@ export interface SimState {
   outcome: RunOutcome;
   score: number;
   progress: number;
-  sensorRadius: number;
-  sensor: SensorReading;
+  eyeSensorRadius: number;
+  sensors: SensorSuite;
 }
 
 export interface ShipStart {
@@ -76,7 +95,7 @@ export interface SimulationOptions {
   hull?: number;
   start?: ShipStart;
   field?: Field;
-  sensorRadius?: number;
+  eyeSensorRadius?: number;
 }
 
 export interface Observation {
@@ -95,8 +114,8 @@ export interface Observation {
   tunnelHeading: number;
   forwardSpeed: number;
   lateralSpeed: number;
-  sensorRadius: number;
-  sensor: SensorReading;
+  eyeSensorRadius: number;
+  sensors: SensorSuite;
 }
 
 export interface Controller {
@@ -109,6 +128,6 @@ export interface Simulation {
   getObservation(): Observation;
   step(action: Action): SimState;
   reset(seed?: number): SimState;
-  setSensorRadius(radius: number): void;
+  setEyeSensorRadius(radius: number): void;
   readonly field: Field;
 }

@@ -49,6 +49,22 @@
               <kbd class="thruster-key">W</kbd>
               <span class="thruster-name">RIGHT</span>
             </div>
+            <div
+              class="hud-item thruster"
+              data-testid="thruster-rear"
+              data-active="false"
+            >
+              <kbd class="thruster-key thruster-key-wide">SPACE</kbd>
+              <span class="thruster-name">REAR</span>
+            </div>
+            <div
+              class="hud-item autopilot-status"
+              data-testid="autopilot-status"
+              data-active="false"
+            >
+              <span class="hud-label">PILOT</span>
+              <span class="autopilot-value">MANUAL</span>
+            </div>
           </div>
           <div class="seed-panel" role="group" aria-label="Course seed">
             <div class="seed-heading">
@@ -93,52 +109,110 @@
           data-testid="game-canvas"
           aria-label="Starship course game canvas"
         >
-          The Starship tunnel is rendered here. Use Q and W to fire thrusters and
-          R to start a new seeded run. Stay inside the tunnel.
+          The Starship tunnel is rendered here. Use Q and W for the bottom
+          thrusters, Space for the rear latch, E for autopilot, and R for a new
+          seeded run. Stay inside the tunnel.
         </canvas>
 
         <div class="instructions" data-testid="instructions">
-          <span><kbd>Q</kbd> left thruster</span>
-          <span><kbd>W</kbd> right thruster</span>
+          <span><kbd>Q</kbd> left</span>
+          <span><kbd>W</kbd> right</span>
+          <span><kbd>Space</kbd> rear latch</span>
+          <span><kbd>E</kbd> autopilot</span>
           <span><kbd>R</kbd> new run</span>
           <span class="instructions-hint">Stay inside the tunnel. Keep the hull intact.</span>
         </div>
 
         <aside
-          class="sensor-panel"
-          data-testid="sensor-panel"
-          aria-label="Ship sensor array"
+          class="sensor-console"
+          data-testid="eye-sensor-panel"
+          aria-label="Ship sensor console"
         >
-          <div class="sensor-panel-header">
-            <span class="sensor-panel-title">SENSOR ARRAY</span>
-            <span class="sensor-scan">
-              SCAN TICK <output data-testid="sensor-scan-tick">0</output>
-            </span>
-          </div>
-          <canvas
-            class="sensor-chart"
-            data-testid="sensor-chart"
-            aria-label="Distance versus angle sensor chart"
-          ></canvas>
-          <div class="sensor-radius-header">
-            <label class="sensor-radius-label" for="sensor-radius">
-              VIEW RADIUS
-            </label>
-            <output class="sensor-radius-value" data-testid="sensor-radius-value">
-              -- m
-            </output>
-          </div>
-          <input
-            class="sensor-radius"
-            id="sensor-radius"
-            data-testid="sensor-radius"
-            type="range"
-            min="20"
-            max="200"
-            step="5"
-            value="120"
-            aria-label="Sensor view radius in meters"
-          />
+          <section class="eye-sensor-block" aria-label="Eye sensor">
+            <div class="sensor-console-header">
+              <span class="sensor-console-title">EYE SENSOR</span>
+              <span class="sensor-scan">
+                SCAN TICK <output data-testid="eye-sensor-scan-tick">0</output>
+              </span>
+            </div>
+            <span class="eye-sensor-caption">WORLD ANGLE 0&deg;-360&deg;</span>
+            <canvas
+              class="eye-sensor-chart"
+              data-testid="eye-sensor-chart"
+              aria-label="Eye sensor distance versus world angle chart"
+            ></canvas>
+            <div class="sensor-radius-header">
+              <label class="sensor-radius-label" for="eye-sensor-radius">
+                VIEW RADIUS
+              </label>
+              <output
+                class="sensor-radius-value"
+                data-testid="eye-sensor-radius-value"
+              >
+                -- m
+              </output>
+            </div>
+            <input
+              class="sensor-radius"
+              id="eye-sensor-radius"
+              data-testid="eye-sensor-radius"
+              type="range"
+              min="20"
+              max="200"
+              step="5"
+              value="120"
+              aria-label="Eye sensor view radius in meters"
+            />
+          </section>
+
+          <section class="nav-sensor-block" aria-label="Navigation sensors">
+            <div class="nav-block direction-block">
+              <span class="nav-block-title">DIRECTION</span>
+              <div
+                class="direction-dial"
+                data-testid="direction-needle"
+                aria-label="Direction needle"
+              >
+                <span class="direction-horizon"></span>
+                <span class="direction-needle-line"></span>
+              </div>
+              <output
+                class="nav-value direction-value"
+                data-testid="direction-value"
+              >
+                +0.0&deg;
+              </output>
+            </div>
+
+            <div class="nav-block distance-block">
+              <span class="nav-block-title">DIST TO START</span>
+              <output class="nav-value" data-testid="distance-to-start">
+                0.0 m
+              </output>
+            </div>
+
+            <div class="nav-block velocity-block">
+              <span class="nav-block-title">VELOCITY</span>
+              <div class="velocity-grid">
+                <span class="velocity-label">SPEED</span>
+                <output class="nav-value" data-testid="velocity-speed">
+                  0.0 m/s
+                </output>
+                <span class="velocity-label">VX</span>
+                <output class="nav-value" data-testid="velocity-vx">
+                  +0.0 m/s
+                </output>
+                <span class="velocity-label">VY</span>
+                <output class="nav-value" data-testid="velocity-vy">
+                  +0.0 m/s
+                </output>
+                <span class="velocity-label">ANGLE</span>
+                <output class="nav-value" data-testid="velocity-angle">
+                  +0.0&deg;
+                </output>
+              </div>
+            </div>
+          </section>
         </aside>
 
         <div

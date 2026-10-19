@@ -36,6 +36,7 @@ Fixed ship values:
 - thruster force `1800` N each
 - thruster cant `15` degrees
 - mounting points `{ x: -16, y: -9 }` and `{ x: 16, y: -9 }`
+- rear thruster force `900` N, mount `{ x: -24, y: 0 }`, force along local `+x`
 
 Atmospheric drag:
 
@@ -65,8 +66,17 @@ Target response:
 - The right nozzle mirrors it. Pressing `W` fires it. Its reaction force points
   upward and to the left and produces counter-clockwise torque.
 - Both thrusters together produce balanced vertical lift.
-- `Q`/`W` are continuous while held. There is no auto-forward or boost control.
-- `R` starts a new run with a new seed.
+- A third rear-facing nozzle is mounted at `REAR_MOUNT = { x: -24, y: 0 }`
+  with `REAR_THRUSTER_FORCE = 900 N`. Its exhaust faces backward and its
+  reaction force points forward along the ship's local `+x`; it produces no
+  torque.
+- `Space` toggles the rear thruster on/off. The latch resets on R, blur, and
+  page hide. It is ignored while the autopilot is active.
+- `E` toggles the deterministic autopilot. The autopilot defaults off and
+  exclusively controls all thrusters while active.
+- `Q`/`W` are continuous while held. There is no manual auto-forward or boost
+  control.
+- `R` starts a new run with a new seed and resets the autopilot controller.
 - Fuel does not exist. Thrust never depletes.
 
 ## Tunnel
@@ -119,33 +129,115 @@ Seed behavior:
 
 ## Ship sensors
 
-- One sensor is mounted at the ship center.
-- The sensor casts `360` rays, one per degree. Angles are ship-relative:
-  `0°` points along the ship's nose, and angles increase counter-clockwise.
-- Each ray returns the distance from the ship center to the nearest tunnel wall
-  surface within the view radius. If no wall is hit, the distance is the view
+The ship exposes a deterministic `sensors` suite with four blocks: eye,
+direction, distance to start, and velocity.
+
+### Eye sensor
+
+- One eye sensor is mounted on the ship. It casts `360` rays, one per degree,
+  at **absolute world angles**: index `i` is world angle `i°`, where `0°`
+  points right and angles increase counter-clockwise.
+- Each ray starts at the **ship hull rim** (the collision capsule surface) in
+  that world direction. The stored distance is from that rim point to the
+  nearest tunnel wall within the view radius. If no wall is hit, the distance
+  is the view radius. Wall distance uses the wall centerline hit minus
+  `WALL_RADIUS` along the ray; it is exact for perpendicular hits and an
+  approximation at oblique incidence. The continuous `nearestWallDistance`
+  remains the hull-surface clearance used for immediate safety.
+- `EyeSensorReading.distances[i]` corresponds to world angle `i` degrees. The
+  array has exactly `360` finite, non-negative values no greater than the scan
   radius.
-- `SensorReading.distances[i]` corresponds to angle `i` degrees. The array has
-  exactly `360` finite, non-negative values no greater than the scan radius.
-- A reading stores `radius`, `tick`, `origin`, `heading`, and `distances`.
-- Scans occur at tick `0` and every `SENSOR_INTERVAL_SECONDS` (`120` ticks).
-  The initial reading is available at load.
-- The configured view radius is `sensorRadius`, default `120 m`, clamped to
-  `SENSOR_VIEW_MIN = 20` and `SENSOR_VIEW_MAX = 200`. Non-finite radius values
-  fall back to the default.
-- `setSensorRadius(radius)` clamps the value and updates the configured radius.
-  It does not rescan immediately; the next scheduled scan uses the new radius.
-  The previous reading remains visible until then.
+- A reading stores `radius`, `tick`, `origin` (ship center at scan), `heading`
+  (ship angle at scan), and `distances`.
+- Scans occur at tick `0` and every `EYE_SENSOR_INTERVAL_SECONDS` (`120`
+  ticks). The initial reading is available at load.
+- The configured view radius is `eyeSensorRadius`, default `120 m`, clamped to
+  `EYE_SENSOR_VIEW_MIN = 20` and `EYE_SENSOR_VIEW_MAX = 200`. Non-finite
+  radius values fall back to the default.
+- `setEyeSensorRadius(radius)` clamps the value and updates the configured
+  radius. It does not rescan immediately; the next scheduled scan uses the new
+  radius. The previous reading remains visible until then.
 - The configured radius persists across `reset`/seed changes. Reset performs a
   new initial scan at tick `0` with the configured radius.
 - The sensor detects the tunnel floor and ceiling only. There are no gates,
   free obstacles, or self-hits.
-- The UI has a radar overlay around the current ship showing the last scan,
-  with range rings and a 1 Hz sweep, plus a bottom-right panel with a filled
-  distance-vs-angle chart and a radius slider (`20..200 m`, default `120`).
-- The radar overlay is centered on the current ship and rotated with the
-  current ship angle. The chart shows the raw ship-relative reading. Both use
-  the last scan radius/data until the next scan.
+- The UI has a world-aligned radar overlay around the current ship showing the
+  last scan's rim distances, range rings, and a 1 Hz sweep. The eye-sensor panel
+  has a filled distance-vs-world-angle chart and a radius slider
+  (`20..200 m`, default `120`).
+
+### Direction sensor
+
+- `sensors.direction.angle` is the ship angle relative to the world horizon,
+  normalized to `-π..π` in the API and shown as signed degrees
+  (`-180°..180°`) in the UI.
+- `0°` is level, positive is nose-up.
+- The UI shows a needle dial and a numeric degree readout. The reading is
+  continuous and updates from the current ship angle.
+
+### Distance to start
+
+- `sensors.distanceToStart` is the Euclidean distance from the spawn position
+  to the current ship center, in meters.
+- It is continuous and may decrease if the ship flies backward.
+- It is distinct from `progress`, which remains the maximum forward x-distance.
+
+### Velocity sensor
+
+- `sensors.velocity` contains world `vx`, `vy`, `speed`, and world velocity
+  angle in radians.
+- The UI shows speed, world velocity components, and direction.
+
+### Sensor suite
+
+```ts
+interface EyeSensorReading {
+  radius: number;
+  tick: number;
+  origin: Vec2;
+  heading: number;
+  distances: readonly number[];
+}
+
+interface DirectionSensorReading {
+  angle: number;
+}
+
+interface VelocitySensorReading {
+  vx: number;
+  vy: number;
+  speed: number;
+  angle: number;
+}
+
+interface SensorSuite {
+  eye: EyeSensorReading;
+  direction: DirectionSensorReading;
+  distanceToStart: number;
+  velocity: VelocitySensorReading;
+}
+```
+
+The old `sensor` / `SensorReading` / `sensorRadius` / `setSensorRadius` names
+are removed. The generic wall-proximity range is `WALL_SENSOR_RANGE`.
+
+### Autopilot
+
+- `createAutopilot()` is a deterministic `Controller` exported from
+  `@moonlander/sim`.
+- E toggles the autopilot. It defaults off.
+- While active, the autopilot exclusively controls all three thrusters;
+  Q/W/Space are ignored. E off restores manual control with the rear latch off.
+- R resets the run and the autopilot controller and keeps the autopilot mode.
+- The controller uses the full observation: eye sensor, direction, distance to
+  start, velocity, tunnel center/heading, and continuous nearest-wall
+  clearance.
+- The controller follows the tunnel centerline/tangent, uses rear thrust for
+  forward speed and bottom thrusters for lift/attitude, and cuts rear thrust
+  when clearance is low. It prioritizes zero wall contact over speed.
+- The UI shows `MANUAL` / `AUTOPILOT` status and the rear thruster state.
+- Acceptance is an empirical zero-contact benchmark, not a formal
+  collision-free guarantee.
 
 ## Collision, damage, and outcomes
 
@@ -169,8 +261,9 @@ Seed behavior:
 ## Camera and presentation
 
 - Canvas 2D side view with the tunnel interior, floor and ceiling walls,
-  structural ribs, atmospheric haze, subtle speed streaks or dust, and the
-  Starship with visible thruster flames.
+  structural ribs, atmospheric haze, subtle speed streaks or dust, the
+  Starship with visible bottom and rear thruster flames, and a world-aligned
+  eye-sensor radar overlay.
 - The camera smoothly follows the ship in two dimensions with velocity
   look-ahead on both axes and a small vertical bias. It never rotates.
 - The renderer may apply a subtle speed-based zoom-out. Camera target, snap, and
@@ -178,14 +271,22 @@ Seed behavior:
 - Rendering reads simulation and tunnel state; it never mutates them.
 - Remove gates, free walls, the star field, and the infinite ground from the
   playable view.
-- HUD telemetry: hull, speed, progress, score, and each thruster's active state.
-  Fuel is not displayed.
+- HUD telemetry: hull, speed, progress, score, bottom/rear thruster states, and
+  autopilot status.
+- The bottom-right sensor console contains:
+  - the eye-sensor chart, world-angle X axis, rim distances, radius slider, and
+    scan tick;
+  - the direction needle with signed-degree readout;
+  - distance to start in meters;
+  - velocity speed, world components, and direction.
 - The current seed is displayed. The player can copy it or enter a specific
   seed to replay a tunnel.
-- `R` generates a new seed and restarts.
+- `R` generates a new seed and restarts; the autopilot mode persists and its
+  controller resets.
 - Outcome overlay for a destroyed Starship, including the final score.
-- The page remains fully playable with `Q`, `W`, and `R`.
-- Instructions mention Q, W, and R, and describe staying inside the tunnel.
+- The page remains fully playable with `Q`, `W`, `Space`, `E`, and `R`.
+- Instructions mention Q, W, Space, E, and R, and describe staying inside the
+  tunnel.
 
 ## Game test hooks
 
@@ -195,24 +296,31 @@ The playable page must expose these stable hooks for Playwright:
 - `data-testid="hud-hull"`, `hud-speed`, `hud-progress`, and `hud-score`, each
   with a `data-value` attribute containing a numeric value in hull units, m/s,
   meters, or points respectively; progress is reported in whole meters
-- `data-testid="thruster-left"` and `data-testid="thruster-right"` with
+- `data-testid="thruster-left"`, `thruster-right`, and `thruster-rear` with
   `data-active="true"` only while that thruster produces thrust
-- `data-testid="instructions"` mentioning Q, W, and R
+- `data-testid="autopilot-status"` with `data-active="true|false"` and
+  `MANUAL` / `AUTOPILOT` text
+- `data-testid="instructions"` mentioning Q, W, Space, E, and R
 - `data-testid="outcome"` visible only after destruction, containing the final
   score
 - `data-testid="seed-display"` showing the current seed
 - `data-testid="seed-input"` accepting an unsigned seed and
   `data-testid="seed-load"` loading it
-- `data-testid="sensor-panel"` containing the sensor controls and chart
-- `data-testid="sensor-chart"` with `data-scan-tick` and `data-scan-radius`
+- `data-testid="eye-sensor-panel"` containing the eye controls and chart
+- `data-testid="eye-sensor-chart"` with `data-scan-tick` and `data-scan-radius`
   attributes reflecting the last scan
-- `data-testid="sensor-radius"` range input with min `20`, max `200`, step `5`,
-  default `120`
-- `data-testid="sensor-radius-value"` showing the configured radius
-- `data-testid="sensor-scan-tick"` showing the last scan tick/time
+- `data-testid="eye-sensor-radius"` range input with min `20`, max `200`,
+  step `5`, default `120`
+- `data-testid="eye-sensor-radius-value"` showing the configured radius
+- `data-testid="eye-sensor-scan-tick"` showing the last scan tick/time
+- `data-testid="direction-needle"` and `direction-value` for the signed
+  horizon angle
+- `data-testid="distance-to-start"` for the Euclidean distance from spawn
+- `data-testid="velocity-speed"`, `velocity-vx`, `velocity-vy`, and
+  `velocity-angle` for the velocity sensor
 
-The page remains fully playable with `Q`, `W`, and `R`. The HUD updates from
-the simulation state, never from render-only mutable state.
+The page remains fully playable with `Q`, `W`, `Space`, `E`, and `R`. The HUD
+updates from the simulation state, never from render-only mutable state.
 
 ## Public simulation API
 
@@ -230,6 +338,7 @@ interface Vec2 {
 interface Action {
   left: boolean;
   right: boolean;
+  rear: boolean;
 }
 
 type RunOutcome = "flying" | "destroyed";
@@ -241,12 +350,30 @@ interface ShipState {
   angularVelocity: number;
 }
 
-interface SensorReading {
+interface EyeSensorReading {
   radius: number;
   tick: number;
   origin: Vec2;
   heading: number;
   distances: readonly number[];
+}
+
+interface DirectionSensorReading {
+  angle: number;
+}
+
+interface VelocitySensorReading {
+  vx: number;
+  vy: number;
+  speed: number;
+  angle: number;
+}
+
+interface SensorSuite {
+  eye: EyeSensorReading;
+  direction: DirectionSensorReading;
+  distanceToStart: number;
+  velocity: VelocitySensorReading;
 }
 
 interface SimState {
@@ -260,8 +387,8 @@ interface SimState {
   outcome: RunOutcome;
   score: number;
   progress: number;
-  sensorRadius: number;
-  sensor: SensorReading;
+  eyeSensorRadius: number;
+  sensors: SensorSuite;
 }
 
 interface ShipStart {
@@ -276,7 +403,7 @@ interface SimulationOptions {
   hull?: number;
   start?: ShipStart;
   field?: Field;
-  sensorRadius?: number;
+  eyeSensorRadius?: number;
 }
 
 interface CurvedWall {
@@ -319,8 +446,8 @@ interface Observation {
   tunnelHeading: number;
   forwardSpeed: number;
   lateralSpeed: number;
-  sensorRadius: number;
-  sensor: SensorReading;
+  eyeSensorRadius: number;
+  sensors: SensorSuite;
 }
 
 interface Controller {
@@ -333,7 +460,7 @@ interface Simulation {
   getObservation(): Observation;
   step(action: Action): SimState;
   reset(seed?: number): SimState;
-  setSensorRadius(radius: number): void;
+  setEyeSensorRadius(radius: number): void;
   readonly field: Field;
 }
 ```
@@ -367,16 +494,19 @@ Required exports:
 - `DAMAGE_SCALE = 4`
 - `INVULNERABILITY_SECONDS = 0.75`
 - `BOUNCE_RESTITUTION = 0.35`
-- `SENSOR_RANGE = 200`
-- `SENSOR_RAY_COUNT = 360`
-- `SENSOR_INTERVAL_SECONDS = 1`
-- `SENSOR_VIEW_MIN = 20`
-- `SENSOR_VIEW_MAX = 200`
-- `SENSOR_VIEW_DEFAULT = 120`
+- `WALL_SENSOR_RANGE = 200`
+- `REAR_THRUSTER_FORCE = 900`
+- `REAR_MOUNT = { x: -24, y: 0 }`
+- `EYE_SENSOR_RAY_COUNT = 360`
+- `EYE_SENSOR_INTERVAL_SECONDS = 1`
+- `EYE_SENSOR_VIEW_MIN = 20`
+- `EYE_SENSOR_VIEW_MAX = 200`
+- `EYE_SENSOR_VIEW_DEFAULT = 120`
 - `START_POSITION = { x: 0, y: 60 }`
 - `DEFAULT_SEED = 1`
 - `createField(seed)` creates a deterministic tunnel field.
 - `createSimulation(options?)` creates a deterministic simulation.
+- `createAutopilot()` creates the deterministic autopilot controller.
 
 Simulation semantics:
 
@@ -385,23 +515,27 @@ Simulation semantics:
 - `simulation.getState()` returns the current state as plain data.
 - `simulation.getObservation()` returns finite numeric observations.
 - `simulation.step(action)` advances exactly one fixed tick while flying.
-  `SimState.thrusters` reports the last commanded action while flying. After
+  `Action` and `SimState.thrusters` include `left`, `right`, and `rear`. After
   `destroyed`, the state is frozen, so the last action remains visible; the game
   suppresses flames.
 - `simulation.reset(seed?)` resets the ship, hull, score, progress, and tunnel.
   If `seed` is provided, it becomes the new seed; otherwise the current seed is
   reused.
 - `simulation.field` exposes the seeded tunnel for rendering and analysis.
-- The default configured sensor radius is `SENSOR_VIEW_DEFAULT = 120`. A sensor
-  scan is produced at tick `0` and every `120` ticks. The reading's `tick` is
-  the tick at which it was produced.
-- `simulation.setSensorRadius(radius)` clamps to `SENSOR_VIEW_MIN..SENSOR_VIEW_MAX`
-  and updates the configured radius. It does not rescan immediately; the next
-  scheduled scan uses the new radius.
-- `simulation.reset(seed?)` keeps the configured sensor radius and produces a
+- The default configured eye view radius is `EYE_SENSOR_VIEW_DEFAULT = 120`. An
+  eye scan is produced at tick `0` and every `120` ticks. The reading's `tick`
+  is the tick at which it was produced.
+- `simulation.setEyeSensorRadius(radius)` clamps to
+  `EYE_SENSOR_VIEW_MIN..EYE_SENSOR_VIEW_MAX` and updates the configured radius.
+  It does not rescan immediately; the next scheduled scan uses the new radius.
+- `simulation.reset(seed?)` keeps the configured eye radius and produces a
   fresh scan at tick `0` with that radius.
 - `simulation.getState()` and `getObservation()` expose both the configured
-  `sensorRadius` and the last `sensor` reading.
+  `eyeSensorRadius` and the four-block `sensors` suite.
+- `createAutopilot()` returns a deterministic `Controller`. The game calls it
+  once per fixed tick when E is active; the simulation itself does not own the
+  autopilot mode. While active it exclusively controls all three thrusters;
+  manual Q/W/Space are ignored.
 - If `SimulationOptions.field` is provided, the simulation uses that field for
   its lifetime and sets its seed from `field.seed`. `reset(seed?)` keeps the
   pinned field and ignores `seed`. This seam exists for deterministic tests and
@@ -416,28 +550,41 @@ Observation semantics:
 - `angularVelocity` is in rad/s.
 - `hull`, `progress`, and `score` mirror the state.
 - `nearestWallDistance` is the distance from the ship hull surface to the
-  nearest tunnel wall within `SENSOR_RANGE`; it is `SENSOR_RANGE` when no wall
-  is nearby and can be negative while the hull is penetrating a surface.
+  nearest tunnel wall within `WALL_SENSOR_RANGE`; it is `WALL_SENSOR_RANGE` when
+  no wall is nearby and can be negative while the hull is penetrating a surface.
 - `tunnelCenterOffset` is `ship.y - tunnel.centerAt(ship.x).y`, positive above
   the centerline.
 - `tunnelHalfWidth` is `tunnel.halfWidth`.
 - `tunnelHeading` is `tunnel.headingAt(ship.x)` in radians.
 - `forwardSpeed` is the velocity projected onto the tunnel tangent.
 - `lateralSpeed` is the velocity projected onto the tunnel normal.
-- `sensorRadius` is the configured view radius. It may differ from
-  `sensor.radius` until the next scheduled scan.
-- `sensor` is the last 360-ray reading. `sensor.distances[i]` is the
-  ship-relative angle `i` (0° = nose, counter-clockwise) distance to the
-  nearest tunnel wall surface, or `sensor.radius` when no wall was hit.
+- `eyeSensorRadius` is the configured eye view radius. It may differ from
+  `sensors.eye.radius` until the next scheduled scan.
+- `sensors.eye` is the last 360-ray reading. `sensors.eye.distances[i]` is the
+  absolute world angle `i` (0° = right, counter-clockwise) distance from the
+  ship hull rim to the nearest tunnel wall surface, or `sensors.eye.radius`
+  when no wall was hit. The reading's `origin` is the ship center at scan and
+  `heading` is the ship angle at scan.
+- `sensors.direction.angle` is the ship angle to the world horizon, normalized
+  to `-π..π`.
+- `sensors.distanceToStart` is the Euclidean distance from the spawn position.
+- `sensors.velocity` is the world velocity vector, speed, and direction.
 - All observation fields are finite numbers.
 
 ## Testing strategy
 
-- Vitest unit tests run in Node for the simulation, sensor ray casting and
-  cadence, and pure game helpers.
-- Playwright verifies the real page, Canvas presence, keyboard thrusters, HUD,
-  seed controls, sensor panel/chart/slider, input-driven progress, restart, and
-  the hidden outcome overlay.
+- Vitest unit tests run in Node for the simulation, rear thruster, eye sensor
+  absolute/rim ray casting and cadence, navigation sensors, autopilot, and pure
+  game helpers.
+- The autopilot benchmark uses 60-second runs on the seeds
+  `1, 7, 42, 1234, 2026, 5678, 99991, 314159`: `nearestWallDistance > 0` every
+  tick, hull 100, progress ≥ 400 m per seed, median ≥ 500 m, and average
+  forward speed ≥ 8 m/s. It is an empirical zero-contact benchmark, not a
+  formal guarantee.
+- Playwright verifies the real page, Canvas presence, keyboard controls, HUD,
+  seed controls, eye-sensor console, direction needle, distance/velocity blocks,
+  autopilot status, rear thruster, input-driven progress, restart, and the
+  hidden outcome overlay.
 - CI runs typecheck, unit tests, browser tests, and production build.
 - A live Playwright smoke test runs against the deployed GitHub Pages URL.
 

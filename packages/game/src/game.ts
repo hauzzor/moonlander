@@ -1,11 +1,17 @@
-import { createSimulation, FIXED_DT, type SimState } from "@moonlander/sim";
+import {
+  createAutopilot,
+  createSimulation,
+  FIXED_DT,
+  type Controller,
+  type SimState,
+} from "@moonlander/sim";
 import { createCamera, snapCamera, updateCamera } from "./camera";
 import { createHud } from "./hud";
 import { createInput } from "./input";
 import { createRenderer } from "./render";
 import { DEFAULT_SEED, nextSeed, parseSeed } from "./seed";
 import { createSeedControls } from "./seed-controls";
-import { createSensorPanel } from "./sensor-panel";
+import { createSensorConsole } from "./sensor-console";
 
 const MAX_FRAME_SECONDS = 0.25;
 
@@ -15,13 +21,15 @@ export function startGame(): void {
   );
   let currentSeed = urlSeed ?? DEFAULT_SEED;
   const sim = createSimulation({ seed: currentSeed });
+  let autopilot: Controller | null = null;
+  let autopilotEnabled = false;
   const camera = createCamera();
   const hud = createHud();
   const renderer = createRenderer();
-  const sensorPanel = createSensorPanel({
-    getSensorRadius: () => sim.getState().sensorRadius,
-    setSensorRadius: (radius) => {
-      sim.setSensorRadius(radius);
+  const sensorConsole = createSensorConsole({
+    getEyeSensorRadius: () => sim.getState().eyeSensorRadius,
+    setEyeSensorRadius: (radius) => {
+      sim.setEyeSensorRadius(radius);
     },
   });
   let accumulator = 0;
@@ -34,6 +42,7 @@ export function startGame(): void {
 
   function resetRun(seed: number): void {
     input.release();
+    autopilot?.reset?.();
     accumulator = 0;
     currentSeed = seed >>> 0;
 
@@ -42,8 +51,8 @@ export function startGame(): void {
     seedControls.applySeed(currentSeed);
 
     snapCamera(camera, state);
-    hud.update(state);
-    sensorPanel.update(state);
+    hud.update(state, autopilotEnabled);
+    sensorConsole.update(state);
     renderState(state);
     lastTime = performance.now();
   }
@@ -52,16 +61,48 @@ export function startGame(): void {
     resetRun(nextSeed(currentSeed));
   }
 
+  function getAutopilot(): Controller {
+    if (autopilot === null) {
+      autopilot = createAutopilot();
+    }
+    return autopilot;
+  }
+
+  function toggleAutopilot(): void {
+    if (autopilotEnabled) {
+      autopilotEnabled = false;
+      input.release();
+      autopilot?.reset?.();
+    } else {
+      const controller = getAutopilot();
+      controller.reset?.();
+      autopilotEnabled = true;
+      input.release();
+    }
+    hud.update(sim.getState(), autopilotEnabled);
+  }
+
   const seedControls = createSeedControls({
     getCurrentSeed: () => currentSeed,
     onLoadSeed: (seed) => {
       resetRun(seed);
     },
   });
-  const input = createInput(restart);
+  const input = createInput({
+    onRestart: restart,
+    onToggleAutopilot: toggleAutopilot,
+    isAutopilotActive: () => autopilotEnabled,
+  });
 
   function stepSimulation(): void {
-    sim.step({ left: input.keys.left, right: input.keys.right });
+    const action = autopilotEnabled
+      ? getAutopilot().act(sim.getObservation())
+      : {
+          left: input.keys.left,
+          right: input.keys.right,
+          rear: input.keys.rear,
+        };
+    sim.step(action);
   }
 
   function frame(now: number): void {
@@ -83,8 +124,8 @@ export function startGame(): void {
 
     const state = sim.getState();
     updateCamera(camera, state, frameTime);
-    hud.update(state);
-    sensorPanel.update(state);
+    hud.update(state, autopilotEnabled);
+    sensorConsole.update(state);
     renderState(state);
 
     animationId = requestAnimationFrame(frame);
@@ -92,7 +133,7 @@ export function startGame(): void {
 
   window.addEventListener("resize", () => {
     renderer.resize();
-    sensorPanel.resize();
+    sensorConsole.resize();
     renderState(sim.getState());
   });
 
@@ -101,8 +142,8 @@ export function startGame(): void {
   currentSeed = initialState.seed >>> 0;
   seedControls.applySeed(currentSeed);
   snapCamera(camera, initialState);
-  hud.update(initialState);
-  sensorPanel.update(initialState);
+  hud.update(initialState, autopilotEnabled);
+  sensorConsole.update(initialState);
   renderState(initialState);
   lastTime = performance.now();
   animationId = requestAnimationFrame(frame);

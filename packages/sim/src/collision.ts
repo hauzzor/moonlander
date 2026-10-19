@@ -1,10 +1,10 @@
 import {
   BOUNCE_RESTITUTION,
-  SENSOR_RANGE,
   SHIP_CAPSULE_HALF_LENGTH,
   SHIP_RADIUS,
   TUNNEL_SAMPLE_STEP,
   WALL_RADIUS,
+  WALL_SENSOR_RANGE,
 } from "./constants";
 import {
   closestPointsBetweenSegments,
@@ -187,7 +187,7 @@ export function nearestWallDistance(
 ): number {
   const capsule = capsuleEndpoints(position, angle);
   const searchRadius =
-    SENSOR_RANGE + CAPSULE_EXTENT + WALL_RADIUS + TUNNEL_SAMPLE_STEP + 1;
+    WALL_SENSOR_RANGE + CAPSULE_EXTENT + WALL_RADIUS + TUNNEL_SAMPLE_STEP + 1;
   let nearest = Number.POSITIVE_INFINITY;
 
   for (const chunk of field.chunksInView(position, searchRadius)) {
@@ -207,5 +207,5 @@ export function nearestWallDistance(
     }
   }
 
-  return nearest <= SENSOR_RANGE ? nearest : SENSOR_RANGE;
+  return nearest <= WALL_SENSOR_RANGE ? nearest : WALL_SENSOR_RANGE;
 }

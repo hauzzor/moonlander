@@ -1,4 +1,8 @@
-import { THRUSTER_CANT, type SimState } from "@moonlander/sim";
+import {
+  REAR_MOUNT,
+  THRUSTER_CANT,
+  type SimState,
+} from "@moonlander/sim";
 import {
   worldToScreen,
   type Camera,
@@ -79,6 +83,62 @@ function drawFlame(
   ctx.restore();
 }
 
+function drawRearFlame(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+): void {
+  const flicker =
+    0.84 +
+    0.11 * Math.sin(state.time * 57 + 1.3) +
+    0.05 * Math.sin(state.time * 97);
+  const length = 10 + flicker * 6;
+  const halfWidth = 2.6;
+  const baseX = REAR_MOUNT.x - 2.4;
+  const baseY = REAR_MOUNT.y;
+  const tipX = baseX - length;
+
+  ctx.save();
+  const glow = ctx.createRadialGradient(baseX, baseY, 0, baseX, baseY, 6);
+  glow.addColorStop(0, "rgba(255, 230, 150, 0.58)");
+  glow.addColorStop(0.45, "rgba(255, 145, 42, 0.2)");
+  glow.addColorStop(1, "rgba(255, 100, 0, 0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(baseX, baseY, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  const outer = ctx.createLinearGradient(baseX, baseY, tipX, baseY);
+  outer.addColorStop(0, "rgba(255, 247, 197, 0.96)");
+  outer.addColorStop(0.4, "rgba(255, 171, 54, 0.86)");
+  outer.addColorStop(1, "rgba(255, 67, 12, 0)");
+  ctx.fillStyle = outer;
+  ctx.beginPath();
+  ctx.moveTo(baseX, baseY - halfWidth);
+  ctx.quadraticCurveTo(
+    baseX - length * 0.55,
+    baseY - halfWidth * 0.45,
+    tipX,
+    baseY,
+  );
+  ctx.quadraticCurveTo(
+    baseX - length * 0.55,
+    baseY + halfWidth * 0.45,
+    baseX,
+    baseY + halfWidth,
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(236, 253, 255, 0.94)";
+  ctx.beginPath();
+  ctx.moveTo(baseX, baseY - halfWidth * 0.38);
+  ctx.lineTo(baseX - length * 0.52, baseY);
+  ctx.lineTo(baseX, baseY + halfWidth * 0.38);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 export function drawStarship(
   ctx: CanvasRenderingContext2D,
   viewport: Viewport,
@@ -103,6 +163,9 @@ export function drawStarship(
   }
   if (!destroyed && state.thrusters.right) {
     drawFlame(ctx, 16, 1, state);
+  }
+  if (!destroyed && state.thrusters.rear) {
+    drawRearFlame(ctx, state);
   }
 
   ctx.fillStyle = "#39445c";
@@ -136,6 +199,36 @@ export function drawStarship(
   ctx.lineTo(18, 3.2);
   ctx.closePath();
   ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = destroyed ? "#343944" : "#303b50";
+  ctx.strokeStyle = destroyed ? "#596170" : "#9bb3d1";
+  ctx.lineWidth = 0.35;
+  ctx.beginPath();
+  ctx.moveTo(REAR_MOUNT.x + 1.4, -2.6);
+  ctx.lineTo(REAR_MOUNT.x - 2.5, -3.1);
+  ctx.lineTo(REAR_MOUNT.x - 2.5, 3.1);
+  ctx.lineTo(REAR_MOUNT.x + 1.4, 2.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = destroyed ? "#242830" : "#121926";
+  ctx.beginPath();
+  ctx.ellipse(
+    REAR_MOUNT.x - 2.4,
+    REAR_MOUNT.y,
+    1.1,
+    2.2,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
+  ctx.strokeStyle = destroyed
+    ? "#4c515c"
+    : "rgba(255, 188, 92, 0.75)";
+  ctx.lineWidth = 0.3;
   ctx.stroke();
 
   ctx.fillStyle = destroyed

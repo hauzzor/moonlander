@@ -11,8 +11,9 @@ import type {
 
 export { sim };
 
-export const noThrusters: Action = { left: false, right: false };
-export const bothThrusters: Action = { left: true, right: true };
+export const noThrusters: Action = { left: false, right: false, rear: false };
+export const rearOnly: Action = { left: false, right: false, rear: true };
+export const bothThrusters: Action = { left: true, right: true, rear: false };
 
 interface ControlledFieldOptions {
   seed?: number;

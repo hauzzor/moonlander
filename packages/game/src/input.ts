@@ -1,5 +1,11 @@
 import type { Action } from "@moonlander/sim";
 
+export interface InputOptions {
+  onRestart(): void;
+  onToggleAutopilot(): void;
+  isAutopilotActive(): boolean;
+}
+
 export interface InputController {
   readonly keys: Action;
   release(): void;
@@ -13,11 +19,12 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
-export function createInput(onRestart: () => void): InputController {
-  const keys: Action = { left: false, right: false };
+export function createInput(options: InputOptions): InputController {
+  const keys: Action = { left: false, right: false, rear: false };
   const release = (): void => {
     keys.left = false;
     keys.right = false;
+    keys.rear = false;
   };
 
   window.addEventListener("keydown", (event) => {
@@ -25,17 +32,34 @@ export function createInput(onRestart: () => void): InputController {
       return;
     }
 
+    if (event.code === "Space" || event.key === " ") {
+      if (!event.repeat && !options.isAutopilotActive()) {
+        keys.rear = !keys.rear;
+      }
+      event.preventDefault();
+      return;
+    }
+
     const key = event.key.toLowerCase();
 
     if (key === "q") {
-      keys.left = true;
+      if (!options.isAutopilotActive()) {
+        keys.left = true;
+      }
       event.preventDefault();
     } else if (key === "w") {
-      keys.right = true;
+      if (!options.isAutopilotActive()) {
+        keys.right = true;
+      }
+      event.preventDefault();
+    } else if (key === "e") {
+      if (!event.repeat) {
+        options.onToggleAutopilot();
+      }
       event.preventDefault();
     } else if (key === "r") {
       if (!event.repeat) {
-        onRestart();
+        options.onRestart();
       }
       event.preventDefault();
     }
@@ -51,6 +75,10 @@ export function createInput(onRestart: () => void): InputController {
       }
     } else if (key === "w") {
       keys.right = false;
+      if (!isEditableTarget(event.target)) {
+        event.preventDefault();
+      }
+    } else if (event.code === "Space" || event.key === " ") {
       if (!isEditableTarget(event.target)) {
         event.preventDefault();
       }

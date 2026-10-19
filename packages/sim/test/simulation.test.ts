@@ -6,11 +6,12 @@ import {
   createSimulationWithField,
   createWideTunnelField,
   noThrusters,
+  rearOnly,
   sim,
 } from "./helpers";
 
-const leftThruster: Action = { left: true, right: false };
-const rightThruster: Action = { left: false, right: true };
+const leftThruster: Action = { left: true, right: false, rear: false };
+const rightThruster: Action = { left: false, right: true, rear: false };
 
 function damageFreeSimulation(start?: ShipStart) {
   return createSimulationWithField(
@@ -35,6 +36,8 @@ describe("fixed-step tunnel simulation", () => {
     expect(sim.THRUSTER_CANT).toBe((15 * Math.PI) / 180);
     expect(sim.LEFT_MOUNT).toEqual({ x: -16, y: -9 });
     expect(sim.RIGHT_MOUNT).toEqual({ x: 16, y: -9 });
+    expect(sim.REAR_MOUNT).toEqual({ x: -24, y: 0 });
+    expect(sim.REAR_THRUSTER_FORCE).toBe(900);
     expect(sim.LINEAR_DRAG).toBe(0.35);
     expect(sim.ANGULAR_DRAG).toBe(0.25);
     expect(sim.TUNNEL_HALF_WIDTH).toBe(34);
@@ -48,25 +51,32 @@ describe("fixed-step tunnel simulation", () => {
     expect(sim.DAMAGE_SCALE).toBe(4);
     expect(sim.INVULNERABILITY_SECONDS).toBe(0.75);
     expect(sim.BOUNCE_RESTITUTION).toBe(0.35);
-    expect(sim.SENSOR_RANGE).toBe(200);
+    expect(sim.WALL_SENSOR_RANGE).toBe(200);
+    expect(sim.EYE_SENSOR_RAY_COUNT).toBe(360);
+    expect(sim.EYE_SENSOR_INTERVAL_SECONDS).toBe(1);
+    expect(sim.EYE_SENSOR_VIEW_MIN).toBe(20);
+    expect(sim.EYE_SENSOR_VIEW_MAX).toBe(200);
+    expect(sim.EYE_SENSOR_VIEW_DEFAULT).toBe(120);
     expect(sim.START_POSITION).toEqual({ x: 0, y: 60 });
     expect(sim.DEFAULT_SEED).toBe(1);
     expect("GROUND_Y" in sim).toBe(false);
     expect("GATE_BONUS" in sim).toBe(false);
+    expect("SENSOR_RANGE" in sim).toBe(false);
+    expect("SENSOR_RAY_COUNT" in sim).toBe(false);
   });
 
   it("starts at the exact default state without gatesPassed or fuel", () => {
     const state = sim.createSimulation().getState();
 
     expect(Object.keys(state).sort()).toEqual([
+      "eyeSensorRadius",
       "hull",
       "invulnerable",
       "outcome",
       "progress",
       "score",
       "seed",
-      "sensor",
-      "sensorRadius",
+      "sensors",
       "ship",
       "thrusters",
       "tick",
@@ -88,18 +98,25 @@ describe("fixed-step tunnel simulation", () => {
       outcome: "flying",
       score: 0,
       progress: 0,
-      sensorRadius: sim.SENSOR_VIEW_DEFAULT,
-      sensor: expect.objectContaining({
-        radius: sim.SENSOR_VIEW_DEFAULT,
-        tick: 0,
-        origin: { x: 0, y: 60 },
-        heading: 0,
-        distances: expect.any(Array),
+      eyeSensorRadius: sim.EYE_SENSOR_VIEW_DEFAULT,
+      sensors: expect.objectContaining({
+        eye: expect.objectContaining({
+          radius: sim.EYE_SENSOR_VIEW_DEFAULT,
+          tick: 0,
+          origin: { x: 0, y: 60 },
+          heading: 0,
+          distances: expect.any(Array),
+        }),
+        direction: { angle: 0 },
+        distanceToStart: 0,
+        velocity: { vx: 0, vy: 0, speed: 0, angle: 0 },
       }),
     });
-    expect(state.sensor.distances).toHaveLength(sim.SENSOR_RAY_COUNT);
+    expect(state.sensors.eye.distances).toHaveLength(sim.EYE_SENSOR_RAY_COUNT);
     expect("gatesPassed" in state).toBe(false);
     expect("fuel" in state).toBe(false);
+    expect("sensor" in state).toBe(false);
+    expect("sensorRadius" in state).toBe(false);
   });
 
   it("advances exactly one 1/120-second tick and derives time from tick", () => {
@@ -171,6 +188,56 @@ describe("fixed-step tunnel simulation", () => {
     expect(state.ship.velocity.y).toBeCloseTo(expectedVy, 13);
     expect(state.ship.velocity.y).toBeGreaterThan(0);
     expect(state.thrusters).toEqual(bothThrusters);
+  });
+
+  it("applies the rear thruster's 900 N local-forward force with zero torque", () => {
+    const state = damageFreeSimulation().step(rearOnly);
+    const dt = sim.FIXED_DT;
+    const linearDamping = 1 + sim.LINEAR_DRAG * dt;
+
+    expect(state.ship.velocity.x).toBeCloseTo(
+      (sim.REAR_THRUSTER_FORCE / sim.SHIP_MASS * dt) / linearDamping,
+      13,
+    );
+    expect(state.ship.velocity.y).toBeCloseTo(
+      (-sim.GRAVITY * dt) / linearDamping,
+      13,
+    );
+    expect(state.ship.angularVelocity).toBe(0);
+    expect(state.thrusters).toEqual(rearOnly);
+  });
+
+  it("rotates rear-thruster force with the ship's local +x axis", () => {
+    const state = damageFreeSimulation({ angle: Math.PI / 2 }).step(rearOnly);
+    const dt = sim.FIXED_DT;
+    const linearDamping = 1 + sim.LINEAR_DRAG * dt;
+
+    expect(state.ship.velocity.x).toBeCloseTo(0, 13);
+    expect(state.ship.velocity.y).toBeCloseTo(
+      ((sim.REAR_THRUSTER_FORCE / sim.SHIP_MASS) - sim.GRAVITY) * dt / linearDamping,
+      13,
+    );
+    expect(state.ship.angularVelocity).toBe(0);
+  });
+
+  it("combines Q, W, and rear thrust with balanced torque and drag-adjusted velocities", () => {
+    const action: Action = { left: true, right: true, rear: true };
+    const state = damageFreeSimulation().step(action);
+    const dt = sim.FIXED_DT;
+    const linearDamping = 1 + sim.LINEAR_DRAG * dt;
+    const netClimbAcceleration =
+      (2 * sim.THRUSTER_FORCE * Math.cos(sim.THRUSTER_CANT)) / sim.SHIP_MASS - sim.GRAVITY;
+
+    expect(state.ship.velocity.x).toBeCloseTo(
+      (sim.REAR_THRUSTER_FORCE / sim.SHIP_MASS * dt) / linearDamping,
+      13,
+    );
+    expect(state.ship.velocity.y).toBeCloseTo(
+      (netClimbAcceleration * dt) / linearDamping,
+      13,
+    );
+    expect(state.ship.angularVelocity).toBeCloseTo(0, 14);
+    expect(state.thrusters).toEqual(action);
   });
 
   it("meets the one-tick lateral, net-climb, and angular acceleration targets", () => {

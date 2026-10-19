@@ -1,6 +1,8 @@
 import type { Action, Vec2 } from "./types";
 import {
   LEFT_MOUNT,
+  REAR_MOUNT,
+  REAR_THRUSTER_FORCE,
   RIGHT_MOUNT,
   THRUSTER_CANT,
   THRUSTER_FORCE,
@@ -53,6 +55,12 @@ export function thrusterEffect(
     forceX += force.x;
     forceY += force.y;
     torque += crossZ(RIGHT_MOUNT, RIGHT_FORCE);
+  }
+  if (action.rear) {
+    const force = rotate({ x: REAR_THRUSTER_FORCE, y: 0 }, angle);
+    forceX += force.x;
+    forceY += force.y;
+    torque += crossZ(REAR_MOUNT, { x: REAR_THRUSTER_FORCE, y: 0 });
   }
   return { force: { x: forceX, y: forceY }, torque };
 }

@@ -18,6 +18,8 @@ export const THRUSTER_FORCE = 1800;
 export const THRUSTER_CANT = (15 * Math.PI) / 180;
 export const LEFT_MOUNT: Vec2 = { x: -16, y: -9 };
 export const RIGHT_MOUNT: Vec2 = { x: 16, y: -9 };
+export const REAR_THRUSTER_FORCE = 900;
+export const REAR_MOUNT: Vec2 = { x: -24, y: 0 };
 
 export const LINEAR_DRAG = 0.35;
 export const ANGULAR_DRAG = 0.25;
@@ -34,11 +36,11 @@ export const DAMAGE_SPEED_THRESHOLD = 2;
 export const DAMAGE_SCALE = 4;
 export const INVULNERABILITY_SECONDS = 0.75;
 export const BOUNCE_RESTITUTION = 0.35;
-export const SENSOR_RANGE = 200;
-export const SENSOR_RAY_COUNT = 360;
-export const SENSOR_INTERVAL_SECONDS = 1;
-export const SENSOR_VIEW_MIN = 20;
-export const SENSOR_VIEW_MAX = 200;
-export const SENSOR_VIEW_DEFAULT = 120;
+export const WALL_SENSOR_RANGE = 200;
+export const EYE_SENSOR_RAY_COUNT = 360;
+export const EYE_SENSOR_INTERVAL_SECONDS = 1;
+export const EYE_SENSOR_VIEW_MIN = 20;
+export const EYE_SENSOR_VIEW_MAX = 200;
+export const EYE_SENSOR_VIEW_DEFAULT = 120;
 
 export const START_POSITION: Vec2 = { x: 0, y: 60 };
