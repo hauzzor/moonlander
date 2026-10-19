@@ -34,8 +34,9 @@ Node for future controller training and evaluation.
 
 ## Landing rules
 
-The lander has two landing feet. Contact with the nose or a single foot is a
-crash. A touchdown requires both feet to contact the ground.
+The lander has two landing feet. A touchdown begins as soon as either foot
+contacts the ground. Either foot may contact first; a small tilt is allowed
+within the safe tilt limit. Contact with the nose or body is always a crash.
 
 A touchdown is safe when all conditions hold:
 
@@ -45,9 +46,9 @@ A touchdown is safe when all conditions hold:
 
 Outcomes:
 
-- `landed`: safe touchdown with both feet inside the landing pad.
-- `missed-pad`: safe touchdown outside the pad.
-- `crashed`: unsafe speeds, excessive tilt, nose contact, or one-foot contact.
+- `landed`: safe foot contact with both feet inside the landing pad.
+- `missed-pad`: safe foot contact outside the pad.
+- `crashed`: unsafe speeds, excessive tilt, or nose/body contact.
 - `flying`: no contact yet.
 
 The simulation stops advancing after any terminal outcome.
@@ -208,12 +209,13 @@ Lander contact geometry in body coordinates:
 `SAFE_LANDING` is `{ verticalSpeed: 2.5, horizontalSpeed: 1.5,
 tilt: 12 degrees in radians }`. Speeds are absolute values.
 
-A touchdown requires both feet in contact and no nose contact. If only one foot
-or the nose contacts, the outcome is `crashed`. Contact on the pad is decided by
-both feet's world x coordinates being within `terrain.pad.left` and
-`terrain.pad.right`. The simulation freezes at a terminal outcome. The
-`thrusters` field reports only thrusters that actually produced thrust during
-the last step, so both are false when fuel is exhausted.
+A touchdown begins when either foot contacts the ground; one foot may touch
+before the other. Nose contact is always `crashed`. Safe one-foot-first contact
+with both feet's world x coordinates within `terrain.pad.left` and
+`terrain.pad.right` is `landed`; safe contact elsewhere is `missed-pad`.
+The simulation freezes at a terminal outcome. The `thrusters` field reports only
+thrusters that actually produced thrust during the last step, so both are false
+when fuel is exhausted.
 
 ## Game test hooks
 

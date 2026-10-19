@@ -184,15 +184,42 @@ describe("terrain-aware landing outcomes", () => {
     expect(state.outcome).toBe("crashed");
   });
 
-  it("crashes on one-foot contact even when speed and tilt are within limits", () => {
+  it("lands safely on the pad when one foot contacts first", () => {
     const angle = SAFE_LANDING.tilt / 2;
     const leftFootOffset = rotate(feet[0], angle);
     const rightFootOffset = rotate(feet[1], angle);
     expect(leftFootOffset.y).toBeLessThan(rightFootOffset.y);
+    expect(Math.abs(angle)).toBeLessThanOrEqual(SAFE_LANDING.tilt);
 
     const state = stepUntilTerminal(createNearGroundSimulation({ x: 300, angle }));
 
-    expect(state.outcome).toBe("crashed");
+    expect(Math.abs(state.lander.velocity.y)).toBeLessThanOrEqual(
+      SAFE_LANDING.verticalSpeed,
+    );
+    expect(Math.abs(state.lander.velocity.x)).toBeLessThanOrEqual(
+      SAFE_LANDING.horizontalSpeed,
+    );
+    expect(Math.abs(state.lander.angle)).toBeLessThanOrEqual(SAFE_LANDING.tilt);
+    expect(state.outcome).toBe("landed");
+  });
+
+  it("misses the pad when one foot contacts first on the flat shoulder", () => {
+    const angle = SAFE_LANDING.tilt / 2;
+    const leftFootOffset = rotate(feet[0], angle);
+    const rightFootOffset = rotate(feet[1], angle);
+    expect(leftFootOffset.y).toBeLessThan(rightFootOffset.y);
+    expect(Math.abs(angle)).toBeLessThanOrEqual(SAFE_LANDING.tilt);
+
+    const state = stepUntilTerminal(createNearGroundSimulation({ x: 225, angle }));
+
+    expect(Math.abs(state.lander.velocity.y)).toBeLessThanOrEqual(
+      SAFE_LANDING.verticalSpeed,
+    );
+    expect(Math.abs(state.lander.velocity.x)).toBeLessThanOrEqual(
+      SAFE_LANDING.horizontalSpeed,
+    );
+    expect(Math.abs(state.lander.angle)).toBeLessThanOrEqual(SAFE_LANDING.tilt);
+    expect(state.outcome).toBe("missed-pad");
   });
 
   it("crashes when the nose reaches the ground before either foot", () => {
