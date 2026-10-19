@@ -24,6 +24,18 @@
     "typecheck:root": "tsc -p tsconfig.json --noEmit",
     "verify": "npm run typecheck && npm test && npm run test:e2e && npm run build",
     "deliver": "node scripts/deliver.mjs",
+    "tickets": "node scripts/tickets.mjs",
+    "tickets:new": "node scripts/tickets.mjs new",
+    "tickets:list": "node scripts/tickets.mjs list",
+    "tickets:status": "node scripts/tickets.mjs status",
+    "tickets:show": "node scripts/tickets.mjs show",
+    "tickets:confirm": "node scripts/tickets.mjs confirm",
+    "tickets:move": "node scripts/tickets.mjs move",
+    "tickets:logs": "node scripts/tickets.mjs logs",
+    "tickets:next": "node scripts/tickets.mjs next",
+    "tickets:run": "node scripts/ticket-runner.mjs",
+    "tickets:pause": "node scripts/tickets.mjs pause",
+    "tickets:resume": "node scripts/tickets.mjs resume",
     "sim:demo": "tsx packages/sim/examples/headless-demo.ts"
   },
   "devDependencies": {

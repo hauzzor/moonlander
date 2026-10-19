@@ -71,6 +71,31 @@ Non-trivial changes use the intake interview and templates described in
 [`docs/changes/TEMPLATE.md`](docs/changes/TEMPLATE.md); the questionnaire, test
 matrix, and contract freeze are under [`docs/templates`](docs/templates/).
 
+## Ticket runner
+
+New work can be queued locally while the runner is busy with other tickets.
+
+```powershell
+npm.cmd run tickets:new -- "Change the thruster sound"
+npm.cmd run tickets:list
+npm.cmd run tickets:status
+npm.cmd run tickets:run
+```
+
+Tickets live under `docs/tickets/` and move through `inbox`, `needs-info`,
+`ready`, `in-progress`, `review`, `done`, and `blocked`. Only confirmed `ready`
+tickets with satisfied dependencies and non-overlapping scopes are claimed.
+Large requests should be split into child tickets.
+
+The runner runs in a dedicated terminal and streams claims, agent sessions,
+test results, the merge queue, and delivery status. Use
+`npm.cmd run tickets:status -- --watch` for a live snapshot and
+`npm.cmd run tickets:logs -- T-0001 --follow` for per-ticket logs. See
+[`docs/tickets/README.md`](docs/tickets/README.md).
+
+Implementation can run in parallel in isolated worktrees; merging, deployment,
+and live verification are serialized per ticket.
+
 ## Local development
 
 Node 24 is required. On Windows in this environment, use the `.cmd` executables

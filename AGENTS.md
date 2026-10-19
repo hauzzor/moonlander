@@ -46,6 +46,9 @@ script execution is disabled.
 - Browser tests: `npm.cmd run test:e2e`
 - Live browser smoke test: `npm.cmd run test:e2e:live`
 - Delivery: `npm.cmd run deliver -- --message "..."`
+- New ticket: `npm.cmd run tickets:new -- "Title"`
+- Ticket queue: `npm.cmd run tickets:list`, `npm.cmd run tickets:status`
+- Ticket runner: `npm.cmd run tickets:run`
 
 ## Change intake interview
 
@@ -121,7 +124,9 @@ Every feature follows this order:
 
 1. The test engineer defines failing tests and proves they fail for the
    intended reason.
-2. The failing test is committed locally.
+2. The failing test is committed locally. In a ticket worktree, the per-ticket
+   lead records the red proof in the ticket log; the runner commits the
+   completed ticket branch after green.
 3. The responsible implementation engineer writes the minimum production code
    to make the tests pass.
 4. The code reviewer checks the behavior, architecture, and TDD evidence.
@@ -152,6 +157,39 @@ Do not commit or push a failing build. If the user explicitly waives delivery
 for a specific build, record the waiver in the change brief. This rule applies
 to every build from now on.
 
+## Continuous ticket queue
+
+The local Markdown queue in `docs/tickets/` is the durable backlog for work that
+can be added continuously, including while ready tickets are being implemented.
+
+- `inbox` tickets can be added at any time. The interactive lead triages them.
+- A ticket may move to `ready` only after the user confirms its written brief
+  and the frontmatter has `confirmed: true` with no open questions.
+- The background runner picks only confirmed `ready` tickets whose dependencies
+  are `done` and whose declared file scopes do not overlap active tickets.
+- Large requests are decomposed into child tickets with narrow scopes and
+  explicit dependencies. Shared contract files are handled by a serialized
+  contract ticket first.
+- Default maximum parallel ticket worktrees is 3. One Playwright/browser suite
+  and one merge/delivery run at a time.
+- Each ticket runs in its own worktree and branch. The `ticket-runner` agent is
+  the lead for that ticket: it follows this guide, TDD, review, and the ticket
+  brief, but must not commit or push.
+- The runner script owns verification, the serialized merge queue, commit,
+  push, live asset polling, the live suite, and ticket status updates.
+- Per-ticket delivery is serialized. The runner may rebase in-flight tickets
+  after a delivery and must re-run verification before merging them.
+- The runner never interviews the user. Ambiguous work stops and is reported as
+  `needs-info`/`blocked`; the interactive lead resolves it.
+- New tickets added while the runner is active wait for triage and scheduling.
+- Ticket status, logs, locks, worktrees, and agent sessions are inspectable; see
+  `docs/tickets/README.md`.
+- The runner must pause instead of mixing unrelated uncommitted code changes in
+  the main worktree into a ticket.
+
+The queue is operated with `npm.cmd run tickets:run` in a separate terminal,
+or with the interactive `ticket-runner` agent/command for one ticket at a time.
+
 ## Agent ownership
 
 - `game-architect`: architecture, simulation API, and boundary reviews. Read-only.
@@ -161,6 +199,8 @@ to every build from now on.
 - `gameplay-engineer`: implementation only in `packages/game`.
 - `release-engineer`: CI, deployment, Playwright live verification, scripts.
 - `code-reviewer`: independent review. Read-only.
+- `ticket-runner`: per-ticket lead; may edit and spawn specialists but must not
+  commit, push, or change shared interfaces without the confirmed ticket brief.
 
 Agents must not run `git commit`, `git push`, or modify `.git`. The lead owns
 integration and delivery.
@@ -178,10 +218,12 @@ are disjoint (for example, simulation tests and game tests, or `packages/sim`
 implementation and `packages/game` implementation). The lead freezes shared
 interfaces in `docs/spec.md` before parallel work starts.
 
-Only one Playwright process may run at a time because the local Vite server uses
-port 4173. Unit tests and typechecks may run in parallel. The lead serializes
-browser runs, integrates all changes, runs the full verification suite, and owns
-the final commit and push.
+The ticket runner assigns `TICKET_PORT` per worktree, so isolated ticket
+worktrees may run Playwright in parallel on distinct ports up to the configured
+parallel limit. The main worktree uses port 4173. Only one live/deployment
+verification may run at a time, and the merge queue serializes ticket delivery.
+The interactive lead still serializes browser runs outside the ticket runner.
+The lead owns final integration and delivery.
 
 ## Engineering rules
 

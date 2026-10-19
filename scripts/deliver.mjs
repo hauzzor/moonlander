@@ -25,6 +25,8 @@ Usage:
 
 Options:
   --message <text>   Commit message. Required for a real run.
+  --push-current     Push the current HEAD without committing. Used by the
+                     ticket merge queue after a verified ticket merge.
   --stage-all        Stage every working-tree change with git add -A.
   --skip-verify      Skip npm run verify.
   --dry-run          Print the plan and make no changes.
@@ -59,6 +61,7 @@ function readValue(argv, index, flag) {
 function parseArgs(argv) {
   const options = {
     message: undefined,
+    pushCurrent: false,
     stageAll: false,
     skipVerify: false,
     dryRun: false,
@@ -77,6 +80,9 @@ function parseArgs(argv) {
     switch (arg) {
       case "--message":
         options.message = readValue(argv, (index += 1), arg);
+        break;
+      case "--push-current":
+        options.pushCurrent = true;
         break;
       case "--stage-all":
         options.stageAll = true;
@@ -512,7 +518,7 @@ async function main() {
     return;
   }
 
-  if (!options.dryRun && !options.message) {
+  if (!options.dryRun && !options.message && !options.pushCurrent) {
     throw new Error("--message is required for a real delivery run");
   }
 
@@ -521,6 +527,53 @@ async function main() {
   const status = await readStatus();
   const stagedStat = await readStagedStat();
   printState(status, stagedStat);
+
+  if (options.pushCurrent) {
+    if (options.dryRun) {
+      console.log("\n--push-current would verify, push HEAD, wait, and run live tests.");
+      return;
+    }
+    if (options.skipVerify) {
+      step("Skipping verification (--skip-verify)");
+    } else {
+      step("Running verification (npm run verify)");
+      await npm(["run", "verify"]);
+    }
+    const asset = await readAssetPath();
+    step(`Built asset: ${asset}`);
+    const commit = (await git(["rev-parse", "HEAD"], { capture: true })).stdout.trim();
+    step(`Using current HEAD ${commit}`);
+
+    if (options.noPush) {
+      step("Skipping push (--no-push)");
+    } else {
+      step(`Pushing to ${options.remote} ${options.branch}`);
+      await git(["push", options.remote, options.branch]);
+    }
+
+    let liveResult;
+    if (options.noPush) {
+      liveResult = "skipped (--no-push)";
+    } else if (options.noLive) {
+      liveResult = "skipped (--no-live)";
+    } else {
+      step(`Waiting for ${asset} at ${options.liveUrl}`);
+      await waitForLiveAsset(options.liveUrl, asset, options.timeoutSeconds);
+      step("Running live Playwright suite");
+      detail(`BASE_URL=${options.liveUrl} node scripts/test-live.mjs`);
+      const live = await runCommand(process.execPath, [liveTestPath], {
+        env: { BASE_URL: options.liveUrl },
+        allowFailure: true,
+        label: "live Playwright suite",
+      });
+      liveResult = live.code === 0 ? "passed" : `failed (exit ${live.code})`;
+    }
+    printResult({ commit, options, asset, liveResult });
+    if (liveResult.startsWith("failed")) {
+      process.exitCode = 1;
+    }
+    return;
+  }
 
   let hasChanges;
 

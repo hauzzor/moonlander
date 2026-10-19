@@ -10,3 +10,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+.worktrees/
+docs/tickets/logs/
+docs/tickets/.locks/
+docs/tickets/PAUSE
