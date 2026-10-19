@@ -19,8 +19,8 @@ function isContact(point: Vec2, terrain: Terrain): boolean {
   return point.y <= terrain.heightAt(point.x);
 }
 
-// A touchdown needs both feet on the ground with the nose clear; any nose
-// or single-foot contact crashes before the speed and tilt limits apply.
+// A touchdown begins as soon as either foot contacts the ground; the nose
+// crashing takes precedence. Pad membership uses both feet's x coordinates.
 export function evaluateOutcome(
   body: LanderState,
   terrain: Terrain,
@@ -30,10 +30,11 @@ export function evaluateOutcome(
   if (isContact(worldPoint(body, NOSE), terrain)) {
     return "crashed";
   }
-  const leftContact = isContact(leftFoot, terrain);
-  const rightContact = isContact(rightFoot, terrain);
-  if (!leftContact || !rightContact) {
-    return leftContact || rightContact ? "crashed" : "flying";
+  if (
+    !isContact(leftFoot, terrain) &&
+    !isContact(rightFoot, terrain)
+  ) {
+    return "flying";
   }
   const safe =
     Math.abs(body.velocity.y) <= SAFE_LANDING.verticalSpeed &&

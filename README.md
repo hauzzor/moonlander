@@ -16,8 +16,8 @@ limited.
 
 ## Landing rules
 
-A touchdown requires both feet to touch down without nose contact. The landing
-is safe when:
+A touchdown begins when either landing foot touches down; one foot may contact
+first. Nose or body contact crashes. The landing is safe when:
 
 - vertical speed is at most 2.5 m/s
 - horizontal speed is at most 1.5 m/s
