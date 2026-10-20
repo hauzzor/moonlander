@@ -1,5 +1,5 @@
 ---
-description: Leads one confirmed Moonlander ticket through TDD, review, and verification.
+description: Leads one confirmed Moonlander ticket through game code TDD or direct development-cycle work, review, and verification.
 mode: primary
 model: opencode-go/deepseek-v4.1-flash
 variant: max

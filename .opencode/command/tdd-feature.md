@@ -1,9 +1,12 @@
 ---
-description: Run the Moonlander red-green-review workflow for a feature.
+description: Run the Moonlander red-green-review workflow for a game code feature.
 agent: build
 ---
 
-Implement this feature using strict TDD: $ARGUMENTS
+Implement this game code feature using strict TDD: $ARGUMENTS
+
+Use this command only for game code. For development-cycle changes, implement
+directly without the TDD cycle.
 
 1. Have `test-engineer` add failing tests and prove the failure.
 2. Run the failing tests yourself and record the evidence.

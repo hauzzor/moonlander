@@ -105,8 +105,9 @@ recovery-exhausted: false
   inspecting the reported PID.
 - Each claimed ticket gets `.worktrees/T-0001` on branch `ticket/T-0001`.
 - The active ticket lock is heartbeated every 30 seconds.
-- The ticket-runner agent follows `AGENTS.md`, TDD, and the ticket brief. It may
-  spawn the test/implementation/review specialists. It may not commit or push.
+- The ticket-runner agent follows `AGENTS.md`, the ticket brief, and TDD for
+  game code tickets. Development-cycle tickets skip TDD. It may spawn the
+  test/implementation/review specialists. It may not commit or push.
 - The runner script verifies, runs the merge queue, commits, pushes, waits for
   the live asset, runs the live suite, and updates ticket status.
 - Recoverable failures move to `blocked`, are requeued once automatically with
@@ -142,10 +143,11 @@ $env:TICKET_RECOVERY_TIMEOUT_MS = "5400000"
 $env:TICKET_STALE_LOCK_MS = "300000"
 ```
 
-Recovery reuses the existing worktree. The agent is told not to restart the TDD
-cycle, not to weaken tests, and to report `BLOCKED` for ambiguity. A delivery
-failure whose branch is already merged and whose worktree is clean retries
-delivery without rerunning the agent.
+Recovery reuses the existing worktree. For game code, the agent is told not to
+restart the TDD cycle and not to weaken tests. Development-cycle tickets are
+implemented directly. Both report `BLOCKED` for ambiguity. A delivery failure
+whose branch is already merged and whose worktree is clean retries delivery
+without rerunning the agent.
 
 Manual recovery after inspection:
 
