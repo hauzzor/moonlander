@@ -256,8 +256,59 @@ Reassessment:
    compact wave-context prompt; do not retry the same long session.
 4. Keep the other quick wins: test contracts, table-driven tests, merged
    delivery, milestone live checks.
-5. Measure wave 3 with the guard. Target at least 20% faster than the 27m23s
-   baseline. The guard was confirmed by the user on 2026-10-20.
+5. Measure wave 3 with the guard and compare by wave type. Small pure-module
+   waves target 15-20 minutes; integration/game waves target 30-40 minutes. The
+   guard was confirmed by the user on 2026-10-20.
+
+## Wave 3 measurement
+
+Wave 3 (T-0013 simulation integration + T-0015 game modules and renderer) is a
+much larger wave than waves 1-2. Measured 41m36s from dispatch, 42m55s including
+preparation, at about $0.528.
+
+| Phase | Wall-clock | Notes |
+| --- | --- | --- |
+| Preparation | 1m19s | Test contracts, wave context, ticket moves |
+| Dispatch and implementation/tests | 17m28s | Four fresh agents; no empty results |
+| Lead checks | 1m19s | |
+| Review | 8m26s | Reviewer found the blocking `tunnelCenterOffset` spec defect |
+| Fix | 3m39s | Perpendicular offset plus stronger tests |
+| Lead verify | 1m57s | |
+| Review confirmation | 1m22s | |
+| Delivery and ticket completion | 7m25s | Live suite 21/21, merged ticket completion |
+| **Total** | **41m36s** | Excludes preparation; 42m55s including it |
+
+The total row excludes the 1m19s preparation phase; including it, the wave took
+42m55s.
+
+What worked:
+
+- Fresh test-engineer and reviewer sessions were reliable; there were no empty
+  results and no failed-session recovery cost.
+- The reviewer caught a real public-contract defect (`tunnelCenterOffset` was
+  vertical instead of perpendicular), which would have fed the T-0014 benchmark
+  the wrong field.
+- The merged delivery and ticket completion task handled the live milestone in
+  7m25s, including the 21/21 live suite.
+- Fresh-session reliability is confirmed: there were no empty sessions, unlike
+  wave 2. The guarded `sim-engineer` reuse threshold remains to be exercised in a
+  later wave.
+
+What dominated:
+
+- The wave itself: T-0013 touched the simulation trunk and five integration test
+  files; T-0015 rebuilt the game modules, renderer, static hooks, and 179 game
+  tests.
+- The review, fix, and confirmation cycle: 13m27s total, plus 1m57s of lead
+  verify. This was justified by the spec defect, not process overhead.
+
+Conclusion: the guarded fast protocol is working; wave size dominates. Keep the
+guard and compare future waves by type:
+- Small pure-module waves: target 15-20 minutes.
+- Integration/game waves: target 30-40 minutes.
+
+The next wave is T-0014 (autopilot benchmark) + T-0016 (sensor console/radar),
+and T-0014 owns the 8-seed benchmark.
 
 ## Open questions
 
