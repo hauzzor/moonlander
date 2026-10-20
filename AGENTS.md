@@ -231,11 +231,11 @@ workflow documentation, and tests for that tooling.
 
 | Agent | Mode | Model | Ownership |
 | --- | --- | --- | --- |
-| `lead` | primary | `opencode-go/deepseek-v4-pro` | intake, briefs, tickets, delegation, review/verify coordination, final report |
+| `lead` | primary | `opencode-go/deepseek-v4.1-flash` | intake, briefs, tickets, delegation, review/verify coordination, final report |
 | `sim-engineer` | subagent | `opencode-go/deepseek-v4.1-flash` | `packages/sim/src`, `packages/sim/examples`, package config |
 | `gameplay-engineer` | subagent | `opencode-go/deepseek-v4.1-flash` | `packages/game`, excluding tests |
 | `test-engineer` | subagent | `opencode-go/deepseek-v4.1-flash` | `packages/*/test`, `e2e`, test config |
-| `reviewer` | subagent | `opencode-go/deepseek-v4-pro` | independent read-only review |
+| `reviewer` | subagent | `opencode-go/deepseek-v4.1-flash` | independent read-only review |
 | `release-engineer` | subagent | `opencode-go/deepseek-v4.1-flash` | CI, scripts, root tooling, commit/push, live verification |
 
 - The `lead` does not edit game code; it delegates.

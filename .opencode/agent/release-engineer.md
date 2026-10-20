@@ -27,9 +27,76 @@ permission:
     "npm.cmd run deliver*": allow
     "npm.cmd run tickets:*": allow
     "git status": allow
+    "git status *": allow
     "git diff*": allow
     "git log*": allow
     "git show*": allow
+    "git branch": allow
+    "git branch --list": allow
+    "git branch -a": allow
+    "git branch -r": allow
+    "git branch -v": allow
+    "git branch -vv": allow
+    "git branch -av": allow
+    "git branch -rv": allow
+    "git branch -avv": allow
+    "git branch -rvv": allow
+    "git branch --show-current*": allow
+    "git branch --contains*": allow
+    "git branch --merged*": allow
+    "git branch --no-merged*": allow
+    "git branch --points-at*": allow
+    "git branch --format*": allow
+    "git branch --sort*": allow
+    "git rev-parse*": allow
+    "git rev-list*": allow
+    "git ls-files*": allow
+    "git ls-tree*": allow
+    "git grep*": allow
+    "git blame*": allow
+    "git describe*": allow
+    "git cat-file*": allow
+    "git merge-base*": allow
+    "git remote": allow
+    "git remote -v": allow
+    "git remote show*": allow
+    "git remote get-url*": allow
+    "git tag": allow
+    "git tag -l": allow
+    "git tag --list": allow
+    "git tag --contains*": allow
+    "git tag --merged*": allow
+    "git tag --no-merged*": allow
+    "git tag --points-at*": allow
+    "git tag --format*": allow
+    "git tag --sort*": allow
+    "git tag -n": allow
+    "git reflog": allow
+    "git reflog show*": allow
+    "git worktree list*": allow
+    "git stash list*": allow
+    "git for-each-ref*": allow
+    "git shortlog*": allow
+    "git whatchanged*": allow
+    "git count-objects*": allow
+    "git fsck*": allow
+    "git check-ignore*": allow
+    "git check-attr*": allow
+    "git config --get*": allow
+    "git config --list*": allow
+    "git config -l*": allow
+    "git version": allow
+    "git verify-commit*": allow
+    "git verify-tag*": allow
+    "git name-rev*": allow
+    "git var*": allow
+    "git diff-tree*": allow
+    "git diff-index*": allow
+    "git diff-files*": allow
+    "git cherry": allow
+    "git cherry -v*": allow
+    "git apply --check*": allow
+    "git apply --stat*": allow
     "git add *": allow
     "git commit *": allow
     "git push": allow
@@ -38,7 +105,13 @@ permission:
     "git push -f*": deny
     "git reset --hard*": deny
     "git clean*": deny
-    "git worktree*": deny
+    "git worktree add*": deny
+    "git worktree remove*": deny
+    "git worktree move*": deny
+    "git worktree prune*": deny
+    "git worktree repair*": deny
+    "git worktree lock*": deny
+    "git worktree unlock*": deny
   task:
     "*": deny
 ---
