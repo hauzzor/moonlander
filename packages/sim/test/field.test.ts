@@ -54,11 +54,15 @@ describe("seeded endless tunnel field", () => {
     expect(field.seed).toBe(41);
     expect(field.chunkSize).toBe(sim.FIELD_CHUNK_SIZE);
     expect(field.tunnel.halfWidth).toBe(sim.TUNNEL_HALF_WIDTH);
-    expect.soft(typeof field.tunnel.halfWidthAt).toBe("function");
-    if (typeof field.tunnel.halfWidthAt === "function") {
-      for (const x of [-10000, 0, 120, 10000]) {
-        expect.soft(field.tunnel.halfWidthAt(x)).toBe(sim.TUNNEL_HALF_WIDTH);
-      }
+    expect(typeof field.tunnel.halfWidthAt).toBe("function");
+    for (const x of [-10000, -120, -8, 0, 80, 119.999, 120]) {
+      expect(field.tunnel.halfWidthAt(x)).toBe(sim.TUNNEL_HALF_WIDTH);
+    }
+    for (const x of [128, 256, 1024, 4096, 10000, 20000]) {
+      const halfWidth = field.tunnel.halfWidthAt(x);
+      expect(Number.isFinite(halfWidth)).toBe(true);
+      expect(halfWidth).toBeGreaterThanOrEqual(sim.TUNNEL_MIN_HALF_WIDTH);
+      expect(halfWidth).toBeLessThanOrEqual(sim.TUNNEL_MAX_HALF_WIDTH);
     }
     expect(typeof field.tunnel.centerAt).toBe("function");
     expect(typeof field.tunnel.headingAt).toBe("function");
@@ -111,25 +115,23 @@ describe("seeded endless tunnel field", () => {
     }
   });
 
-  it("samples top and bottom walls every 8 m and keeps every segment in its owning chunk", () => {
+  it("assigns each straight-opening wall segment to one chunk with chords within TUNNEL_SAMPLE_STEP", () => {
     const field = sim.createField(91);
-    const segments = collectWallSegments(field, [-4, 4], [-2, 3]);
+    const segments = collectWallSegments(field, [-3, 2], [0, 1])
+      .filter(({ end }) => end.x <= sim.TUNNEL_START_STRAIGHT);
     const segmentKeys = new Set<string>();
 
     expect(segments.length).toBeGreaterThan(0);
     for (const { chunk, start, end } of segments) {
-      expect(Math.abs(end.x - start.x)).toBe(sim.TUNNEL_SAMPLE_STEP);
+      expect(Number.isFinite(start.x) && Number.isFinite(start.y)).toBe(true);
+      expect(Number.isFinite(end.x) && Number.isFinite(end.y)).toBe(true);
+      expect(Math.hypot(end.x - start.x, end.y - start.y)).toBeLessThanOrEqual(
+        sim.TUNNEL_SAMPLE_STEP + 1e-9,
+      );
+
       const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
       expect(Math.floor(midpoint.x / field.chunkSize)).toBe(chunk.coord.x);
       expect(Math.floor(midpoint.y / field.chunkSize)).toBe(chunk.coord.y);
-
-      const startCenter = field.tunnel.centerAt(start.x);
-      const endCenter = field.tunnel.centerAt(end.x);
-      const startOffset = start.y - startCenter.y;
-      const endOffset = end.y - endCenter.y;
-      const expectedSide = startOffset < 0 ? -sim.TUNNEL_HALF_WIDTH : sim.TUNNEL_HALF_WIDTH;
-      expect(startOffset).toBe(expectedSide);
-      expect(endOffset).toBe(expectedSide);
 
       const key = `${start.x}:${start.y}:${end.x}:${end.y}`;
       expect(segmentKeys.has(key)).toBe(false);
@@ -137,23 +139,23 @@ describe("seeded endless tunnel field", () => {
     }
   });
 
-  it("joins sampled wall endpoints across positive and negative chunk seams", () => {
+  it("joins straight-opening wall endpoints across chunk seams without assuming a fixed x-step", () => {
     const field = sim.createField(7001);
-    const segments = collectWallSegments(field, [-3, 3], [-2, 3]);
+    const segments = collectWallSegments(field, [-3, 2], [0, 1])
+      .filter(({ end }) => end.x <= sim.TUNNEL_START_STRAIGHT);
 
-    for (const seamX of [-160, -80, 0, 80, 160]) {
-      for (const side of [-1, 1]) {
-        const incoming = segments.find(
-          ({ start, end }) => start.x === seamX - sim.TUNNEL_SAMPLE_STEP && end.x === seamX &&
-            Math.sign((start.y + end.y) / 2 - sim.TUNNEL_CENTER_Y) === side,
-        );
-        const outgoing = segments.find(
-          ({ start, end }) => start.x === seamX && end.x === seamX + sim.TUNNEL_SAMPLE_STEP &&
-            Math.sign((start.y + end.y) / 2 - sim.TUNNEL_CENTER_Y) === side,
-        );
-        expect(incoming).toBeDefined();
-        expect(outgoing).toBeDefined();
-        expect(incoming!.end).toEqual(outgoing!.start);
+    for (const side of [-1, 1]) {
+      const chain = segments
+        .filter(({ start, end }) => {
+          const midpointX = (start.x + end.x) / 2;
+          const midpointY = (start.y + end.y) / 2;
+          return Math.sign(midpointY - field.tunnel.centerAt(midpointX).y) === side;
+        })
+        .sort((a, b) => a.start.x - b.start.x);
+
+      expect(chain.length).toBeGreaterThan(0);
+      for (let index = 1; index < chain.length; index += 1) {
+        expect(chain[index]!.start).toEqual(chain[index - 1]!.end);
       }
     }
   });

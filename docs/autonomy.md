@@ -53,8 +53,8 @@ tunnel.
 | `progress` | Maximum forward x-distance from spawn in meters |
 | `score` | `floor(progress)` |
 | `nearestWallDistance` | Hull-surface distance to the nearest tunnel wall, capped at `WALL_SENSOR_RANGE`; may be negative during penetration |
-| `tunnelCenterOffset` | Signed vertical offset from the tunnel centerline, positive above |
-| `tunnelHalfWidth` | Half the tunnel width in meters |
+| `tunnelCenterOffset` | Signed perpendicular offset from the local tunnel centerline, positive along the local normal and consistent with `lateralSpeed` |
+| `tunnelHalfWidth` | Local perpendicular half-width in meters |
 | `tunnelHeading` | Centerline tangent angle in radians |
 | `forwardSpeed` | Velocity projected onto the tunnel tangent |
 | `lateralSpeed` | Velocity projected onto the tunnel normal |
@@ -62,7 +62,8 @@ tunnel.
 | `sensors` | Four-block sensor suite: eye, direction, distance-to-start, velocity |
 
 All values are finite. The Starship collision capsule has radius 9 m and
-half-length 15 m. The tunnel is 68 m wide and has no ground plane or gates.
+half-length 15 m. The tunnel varies between 50 and 110 m total width, bends
+near-vertically (up to 85 degrees), and has no ground plane or gates.
 
 ### Ship sensors
 
@@ -89,9 +90,15 @@ observation. It exclusively controls all three thrusters while enabled, is
 toggled by E in the game, and targets zero wall contact over its empirical
 benchmark.
 
+The benchmark runs 60 seconds on the fixed seeds
+`1, 7, 42, 1234, 2026, 5678, 99991, 314159` and requires `nearestWallDistance >
+0` every tick, hull `100`, progress at least `200 m` per seed, median progress
+at least `300 m`, and average world-x speed at least `4 m/s`.
+
 ## Model lifecycle
 
-- `createSimulation({ seed, hull?, start?, field? })` creates a run.
+- `createSimulation({ seed, hull?, start?, field?, eyeSensorRadius? })` creates
+  a run.
 - The default seed is `1`; seeds are unsigned 32-bit integers.
 - `reset(seed?)` restores the configured start and hull. Without a pinned
   field, it regenerates the tunnel when a seed is provided and reuses the
@@ -110,8 +117,12 @@ benchmark.
 
 - The field is an endless tunnel sampled in 80 m chunks.
 - The centerline is straight at `y = 60` for the first 120 m, then follows a
-  seeded, bounded sum-of-sines curve.
-- The tunnel is 68 m wide; top and bottom walls are sampled every 8 m.
+  seeded, x-monotonic, near-vertical curve (up to 85 degrees) that stays within
+  150 m of `y = 60`.
+- The local corridor width varies perpendicular to the centerline between 50 and
+  110 m total. `field.tunnel.halfWidthAt(x)` returns the local half-width.
+- Top and bottom walls are normal-offset from the centerline and adaptively
+  sampled to a maximum 8 m chord length on steep sections.
 - `field.tunnel.centerAt(x)` and `headingAt(x)` expose the centerline.
 - `field.getChunk(cx, cy)` is deterministic for a given seed and coordinates,
   including negative coordinates.

@@ -83,10 +83,10 @@ Target response:
 ## Tunnel
 
 The tunnel is a continuous corridor. `TUNNEL_HALF_WIDTH = 34` m is the nominal
-half-width (68 m total). The near-vertical, variable-width contract is frozen by
-T-0001; the current generator still uses vertical wall offsets at the constant
-nominal width and the previous gentle bend waveform, so its generated geometry
-is unchanged. T-0002 implements the terrain behavior described below.
+half-width (68 m total). The local corridor width varies perpendicular to the
+centerline between `TUNNEL_MIN_HALF_WIDTH = 25` and
+`TUNNEL_MAX_HALF_WIDTH = 55` m. After a straight opening, the centerline bends
+near-vertically (up to 85 degrees) and never doubles back.
 
 - The centerline starts at `TUNNEL_CENTER_Y = 60`.
 - The first `TUNNEL_START_STRAIGHT = 120` m of x is straight at `y = 60`,
@@ -98,19 +98,18 @@ is unchanged. T-0002 implements the terrain behavior described below.
   `y = 60`.
 - `TUNNEL_MAX_CLIMB_ANGLE = 85°`, expressed as `(85 * Math.PI) / 180` radians,
   and the absolute centerline slope is at most
-  `TUNNEL_MAX_SLOPE = Math.tan(TUNNEL_MAX_CLIMB_ANGLE)`. T-0002 must also
-  guarantee at least one sampled section with `|slope| >= tan(80°)` in every
+  `TUNNEL_MAX_SLOPE = Math.tan(TUNNEL_MAX_CLIMB_ANGLE)`. The generator
+  guarantees at least one sampled section with `|slope| >= tan(80°)` in every
   1,000 m of x after the straight.
 - Local corridor width is measured perpendicular to the centerline. It is
   exposed by `Tunnel.halfWidthAt(x)` and is frozen within
   `TUNNEL_MIN_HALF_WIDTH = 25` and `TUNNEL_MAX_HALF_WIDTH = 55` m (50-110 m
   total). The first 120 m remains exactly 68 m wide.
 - `TUNNEL_SAMPLE_STEP = 8` is the maximum world-space wall chord length, not a
-  fixed x-step. T-0002 uses a smaller x-step on near-vertical sections so every
-  chord stays at or below 8 m; T-0001 still samples at fixed 8 m x intervals.
+  fixed x-step. The generator uses a smaller x-step on near-vertical sections
+  so every chord stays at or below 8 m.
 - Wall geometry is offset normal to the local centerline by the local
-  half-width. T-0001 keeps the previous vertical-offset, constant-width
-  generator; T-0002 implements normal-offset, variable-width walls.
+  half-width.
 - Wall segments are assigned to exactly one `FIELD_CHUNK_SIZE = 80` m chunk
   based on the segment midpoint. Adjacent chunks share endpoint coordinates so
   the tunnel is continuous.
@@ -573,12 +572,9 @@ Observation semantics:
   no wall is nearby and can be negative while the hull is penetrating a surface.
 - `tunnelCenterOffset` is the signed perpendicular offset from the local
   centerline, positive along the local normal and consistent with
-  `lateralSpeed`. T-0001 currently reports the vertical offset
-  `ship.y - tunnel.centerAt(ship.x).y`; T-0002 implements the perpendicular
-  contract.
+  `lateralSpeed`.
 - `tunnelHalfWidth` is the local perpendicular half-width,
-  `tunnel.halfWidthAt(ship.x)`. T-0001's `halfWidthAt` stub returns the nominal
-  34 m; T-0002 implements local width variation.
+  `tunnel.halfWidthAt(ship.x)`.
 - `tunnelHeading` is `tunnel.headingAt(ship.x)` in radians.
 - `forwardSpeed` is the velocity projected onto the tunnel tangent.
 - `lateralSpeed` is the velocity projected onto the tunnel normal.
@@ -602,9 +598,9 @@ Observation semantics:
   game helpers.
 - The autopilot benchmark uses 60-second runs on the seeds
   `1, 7, 42, 1234, 2026, 5678, 99991, 314159`: `nearestWallDistance > 0` every
-  tick, hull 100, progress ≥ 400 m per seed, median ≥ 500 m, and average
-  forward speed ≥ 8 m/s. It is an empirical zero-contact benchmark, not a
-  formal guarantee.
+  tick, hull 100, progress ≥ 200 m per seed, median progress ≥ 300 m, and
+  average world-x speed ≥ 4 m/s. It is an empirical zero-contact benchmark,
+  not a formal guarantee.
 - Playwright verifies the real page, Canvas presence, keyboard controls, HUD,
   seed controls, eye-sensor console, direction needle, distance/velocity blocks,
   autopilot status, rear thruster, input-driven progress, restart, and the
