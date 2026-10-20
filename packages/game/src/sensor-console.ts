@@ -4,12 +4,13 @@ import {
   EYE_SENSOR_VIEW_MAX,
   EYE_SENSOR_VIEW_MIN,
   type EyeSensorReading,
-  type SensorSuite,
   type SimState,
+  type Vec2,
 } from "@moonlander/sim";
-import { getElement, getHudElement } from "./dom";
+import { getElement, getHudElement, readDevicePixelRatio } from "./dom";
 
-const EYE_SENSOR_VIEW_STEP = 5;
+export const EYE_SENSOR_RADIUS_STEP = 5;
+
 const CHART_BACKGROUND = "#071018";
 const CHART_LEFT = 34;
 const CHART_RIGHT = 14;
@@ -17,6 +18,7 @@ const CHART_TOP = 10;
 const CHART_BOTTOM = 18;
 const ANGLE_TICKS = [0, 90, 180, 270, 360] as const;
 const RADIUS_TICKS = [0, 0.25, 0.5, 0.75, 1] as const;
+const ZERO_TOLERANCE = 0.05;
 
 export interface SensorConsoleOptions {
   getEyeSensorRadius(): number;
@@ -28,14 +30,107 @@ export interface SensorConsoleController {
   resize(): void;
 }
 
+export interface SensorConsoleValues {
+  configuredRadius: number;
+  scanTick: number;
+  scanRadius: number;
+  scanDistances: readonly number[];
+  directionDegrees: number;
+  directionNeedleDegrees: number;
+  distanceToStart: number;
+  speed: number;
+  vx: number;
+  vy: number;
+  velocityAngleDegrees: number;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function formatSigned(value: number, decimals: number): string {
-  const rounded = Math.abs(value) < 0.5 / 10 ** decimals ? 0 : value;
+export function clampEyeSensorView(radius: number): number {
+  return clamp(
+    Number.isFinite(radius) ? radius : EYE_SENSOR_VIEW_DEFAULT,
+    EYE_SENSOR_VIEW_MIN,
+    EYE_SENSOR_VIEW_MAX,
+  );
+}
+
+export function normalizeDegrees(degrees: number): number {
+  if (!Number.isFinite(degrees)) {
+    return 0;
+  }
+
+  const wrapped = ((((degrees + 180) % 360) + 360) % 360) - 180;
+  if (wrapped === -180 && degrees > 0) {
+    return 180;
+  }
+  return Math.abs(wrapped) < ZERO_TOLERANCE ? 0 : wrapped;
+}
+
+export function radiansToSignedDegrees(radians: number): number {
+  return normalizeDegrees((radians * 180) / Math.PI);
+}
+
+export function directionNeedleDegrees(angleRadians: number): number {
+  return -radiansToSignedDegrees(angleRadians);
+}
+
+export function formatSigned(value: number, decimals = 1): string {
+  if (!Number.isFinite(value)) {
+    return (0).toFixed(decimals);
+  }
+
+  const threshold = 0.5 / 10 ** decimals;
+  const rounded = Math.abs(value) < threshold ? 0 : value;
   const fixed = rounded.toFixed(decimals);
   return rounded > 0 ? `+${fixed}` : fixed;
+}
+
+export function formatSignedDegrees(
+  degrees: number,
+  decimals = 1,
+): string {
+  return `${formatSigned(normalizeDegrees(degrees), decimals)}\u00b0`;
+}
+
+export function formatRadius(radius: number): string {
+  const clamped = clampEyeSensorView(radius);
+  return `${clamped.toFixed(1).replace(/\.0$/, "")} m`;
+}
+
+export function computeSensorConsoleValues(
+  state: SimState,
+): SensorConsoleValues {
+  const configuredRadius = clampEyeSensorView(state.eyeSensorRadius);
+  const eye = state.sensors.eye;
+  const scanRadius =
+    Number.isFinite(eye.radius) && eye.radius > 0
+      ? eye.radius
+      : configuredRadius;
+  const directionDegrees = radiansToSignedDegrees(
+    state.sensors.direction.angle,
+  );
+  const velocity = state.sensors.velocity;
+  const speed = Number.isFinite(velocity.speed)
+    ? velocity.speed
+    : Math.hypot(velocity.vx, velocity.vy);
+
+  return {
+    configuredRadius,
+    scanTick: eye.tick,
+    scanRadius,
+    scanDistances: eye.distances,
+    directionDegrees,
+    directionNeedleDegrees: -directionDegrees,
+    distanceToStart: Number.isFinite(state.sensors.distanceToStart)
+      ? state.sensors.distanceToStart
+      : 0,
+    speed: Number.isFinite(speed) ? speed : 0,
+    vx: Number.isFinite(velocity.vx) ? velocity.vx : 0,
+    vy: Number.isFinite(velocity.vy) ? velocity.vy : 0,
+    velocityAngleDegrees: radiansToSignedDegrees(velocity.angle),
+  };
 }
 
 function setOutput(
@@ -47,6 +142,38 @@ function setOutput(
   element.setAttribute("data-value", String(value));
 }
 
+function eyeChartPoints(
+  reading: EyeSensorReading,
+  plotLeft: number,
+  plotRight: number,
+  plotTop: number,
+  plotBottom: number,
+): Vec2[] {
+  const radius =
+    Number.isFinite(reading.radius) && reading.radius > 0
+      ? reading.radius
+      : 1;
+  const plotWidth = Math.max(1, plotRight - plotLeft);
+  const plotHeight = Math.max(1, plotBottom - plotTop);
+  const points: Vec2[] = [];
+
+  for (let index = 0; index < EYE_SENSOR_RAY_COUNT; index += 1) {
+    const rawDistance = reading.distances[index];
+    const distance =
+      typeof rawDistance === "number" && Number.isFinite(rawDistance)
+        ? rawDistance
+        : radius;
+    const fraction = clamp(distance / radius, 0, 1);
+
+    points.push({
+      x: plotLeft + (index / EYE_SENSOR_RAY_COUNT) * plotWidth,
+      y: plotBottom - fraction * plotHeight,
+    });
+  }
+
+  return points;
+}
+
 function drawChart(
   ctx: CanvasRenderingContext2D,
   chart: HTMLCanvasElement,
@@ -54,7 +181,7 @@ function drawChart(
 ): void {
   const cssWidth = Math.max(1, chart.clientWidth);
   const cssHeight = Math.max(1, chart.clientHeight);
-  const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+  const dpr = readDevicePixelRatio();
   const pixelWidth = Math.max(1, Math.round(cssWidth * dpr));
   const pixelHeight = Math.max(1, Math.round(cssHeight * dpr));
 
@@ -73,7 +200,10 @@ function drawChart(
   const plotBottom = Math.max(plotTop + 1, cssHeight - CHART_BOTTOM);
   const plotWidth = plotRight - plotLeft;
   const plotHeight = plotBottom - plotTop;
-  const radius = Math.max(1, reading.radius);
+  const radius =
+    Number.isFinite(reading.radius) && reading.radius > 0
+      ? reading.radius
+      : 1;
 
   const xForAngle = (angle: number): number =>
     plotLeft + (angle / 360) * plotWidth;
@@ -118,17 +248,13 @@ function drawChart(
     ctx.fillText(`${angle}\u00b0`, x, plotBottom + 4);
   }
 
-  const points: { x: number; y: number }[] = [];
-
-  for (let index = 0; index < EYE_SENSOR_RAY_COUNT; index += 1) {
-    const distance = reading.distances[index] ?? radius;
-    const fraction = clamp(distance / radius, 0, 1);
-    points.push({
-      x: xForAngle((index / EYE_SENSOR_RAY_COUNT) * 360),
-      y: yForFraction(fraction),
-    });
-  }
-
+  const points = eyeChartPoints(
+    reading,
+    plotLeft,
+    plotRight,
+    plotTop,
+    plotBottom,
+  );
   const first = points[0]!;
   const fill = ctx.createLinearGradient(0, plotTop, 0, plotBottom);
   fill.addColorStop(0, "rgba(94, 244, 236, 0.28)");
@@ -165,6 +291,7 @@ export function createSensorConsole(
     HTMLCanvasElement,
   );
   const context = chart.getContext("2d");
+
   if (context === null) {
     throw new Error("Could not acquire eye sensor chart context");
   }
@@ -185,15 +312,10 @@ export function createSensorConsole(
 
   slider.min = String(EYE_SENSOR_VIEW_MIN);
   slider.max = String(EYE_SENSOR_VIEW_MAX);
-  slider.step = String(EYE_SENSOR_VIEW_STEP);
+  slider.step = String(EYE_SENSOR_RADIUS_STEP);
 
-  const configuredRadius = options.getEyeSensorRadius();
-  let displayedRadius = clamp(
-    Number.isFinite(configuredRadius)
-      ? configuredRadius
-      : EYE_SENSOR_VIEW_DEFAULT,
-    EYE_SENSOR_VIEW_MIN,
-    EYE_SENSOR_VIEW_MAX,
+  let displayedRadius = clampEyeSensorView(
+    options.getEyeSensorRadius(),
   );
   let lastReading: EyeSensorReading | null = null;
   let lastScanKey: string | null = null;
@@ -202,19 +324,18 @@ export function createSensorConsole(
   let lastChartDpr = -1;
 
   const setRadiusReadout = (radius: number): void => {
-    displayedRadius = radius;
-    slider.value = String(radius);
-    radiusValue.textContent = `${radius} m`;
+    const clamped = clampEyeSensorView(radius);
+    displayedRadius = clamped;
+    slider.value = String(clamped);
+    setOutput(radiusValue, formatRadius(clamped), clamped);
   };
 
   setRadiusReadout(displayedRadius);
 
   slider.addEventListener("input", () => {
-    const value = Number(slider.value);
+    const value = clampEyeSensorView(Number(slider.value));
     options.setEyeSensorRadius(value);
-    setRadiusReadout(
-      clamp(value, EYE_SENSOR_VIEW_MIN, EYE_SENSOR_VIEW_MAX),
-    );
+    setRadiusReadout(value);
   });
 
   const drawCurrentReading = (): void => {
@@ -224,7 +345,7 @@ export function createSensorConsole(
 
     lastChartWidth = chart.clientWidth;
     lastChartHeight = chart.clientHeight;
-    lastChartDpr = clamp(window.devicePixelRatio || 1, 1, 2);
+    lastChartDpr = readDevicePixelRatio();
     drawChart(context, chart, lastReading);
   };
 
@@ -232,75 +353,65 @@ export function createSensorConsole(
     lastReading = reading;
     chart.setAttribute("data-scan-tick", String(reading.tick));
     chart.setAttribute("data-scan-radius", String(reading.radius));
-    scanTick.textContent = String(reading.tick);
+    setOutput(scanTick, String(reading.tick), reading.tick);
     drawCurrentReading();
   };
 
-  const updateNavigation = (sensors: SensorSuite): void => {
-    const directionDegrees =
-      (sensors.direction.angle * 180) / Math.PI;
+  const updateNavigation = (values: SensorConsoleValues): void => {
     directionNeedle.style.setProperty(
       "--needle-angle",
-      `${-directionDegrees}deg`,
+      `${values.directionNeedleDegrees}deg`,
     );
     setOutput(
       directionValue,
-      `${formatSigned(directionDegrees, 1)}\u00b0`,
-      directionDegrees,
+      formatSignedDegrees(values.directionDegrees),
+      values.directionDegrees,
     );
 
     setOutput(
       distanceToStart,
-      `${sensors.distanceToStart.toFixed(1)} m`,
-      sensors.distanceToStart,
+      `${values.distanceToStart.toFixed(1)} m`,
+      values.distanceToStart,
     );
 
-    const velocity = sensors.velocity;
     setOutput(
       velocitySpeed,
-      `${velocity.speed.toFixed(1)} m/s`,
-      velocity.speed,
+      `${values.speed.toFixed(1)} m/s`,
+      values.speed,
     );
-    setOutput(
-      velocityVx,
-      `${formatSigned(velocity.vx, 1)} m/s`,
-      velocity.vx,
-    );
-    setOutput(
-      velocityVy,
-      `${formatSigned(velocity.vy, 1)} m/s`,
-      velocity.vy,
-    );
-
-    const velocityDegrees = (velocity.angle * 180) / Math.PI;
+    setOutput(velocityVx, `${formatSigned(values.vx)} m/s`, values.vx);
+    setOutput(velocityVy, `${formatSigned(values.vy)} m/s`, values.vy);
     setOutput(
       velocityAngle,
-      `${formatSigned(velocityDegrees, 1)}\u00b0`,
-      velocityDegrees,
+      formatSignedDegrees(values.velocityAngleDegrees),
+      values.velocityAngleDegrees,
     );
   };
 
   return {
     update(state: SimState): void {
-      if (state.eyeSensorRadius !== displayedRadius) {
-        setRadiusReadout(state.eyeSensorRadius);
+      const values = computeSensorConsoleValues(state);
+
+      if (values.configuredRadius !== displayedRadius) {
+        setRadiusReadout(values.configuredRadius);
       }
 
       const reading = state.sensors.eye;
       const scanKey = `${state.seed}:${reading.tick}:${reading.radius}`;
-      if (scanKey !== lastScanKey) {
-        lastScanKey = scanKey;
-        applyReading(reading);
-      } else if (
+      const chartSizeChanged =
         lastReading !== null &&
         (chart.clientWidth !== lastChartWidth ||
           chart.clientHeight !== lastChartHeight ||
-          clamp(window.devicePixelRatio || 1, 1, 2) !== lastChartDpr)
-      ) {
+          readDevicePixelRatio() !== lastChartDpr);
+
+      if (reading !== lastReading || scanKey !== lastScanKey) {
+        lastScanKey = scanKey;
+        applyReading(reading);
+      } else if (chartSizeChanged) {
         drawCurrentReading();
       }
 
-      updateNavigation(state.sensors);
+      updateNavigation(values);
     },
 
     resize(): void {
