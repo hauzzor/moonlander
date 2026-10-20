@@ -5,6 +5,7 @@ export function drawBackdrop(
   viewport: Viewport,
 ): void {
   const { width, height } = viewport;
+
   const background = ctx.createLinearGradient(0, 0, 0, height);
   background.addColorStop(0, "#02030a");
   background.addColorStop(0.5, "#050815");

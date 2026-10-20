@@ -45,9 +45,53 @@ function makeState(
   };
 }
 
+function clone<T>(value: T): T {
+  return structuredClone(value);
+}
+
 describe("camera helpers", () => {
   it("creates an uninitialized camera at the origin", () => {
     expect(createCamera()).toEqual({ x: 0, y: 0, ready: false });
+  });
+
+  it("never stores or changes a rotation", () => {
+    const camera = createCamera();
+    expect(Object.keys(camera).sort()).toEqual(["ready", "x", "y"]);
+
+    snapCamera(camera, makeState({ x: 10, y: 20 }, { x: 3, y: 4 }));
+    expect(Object.keys(camera).sort()).toEqual(["ready", "x", "y"]);
+
+    updateCamera(camera, makeState({ x: 30, y: 40 }, { x: -5, y: 6 }), 1 / 60);
+    expect(Object.keys(camera).sort()).toEqual(["ready", "x", "y"]);
+  });
+
+  it("computes the camera target without mutating simulation state", () => {
+    const state = makeState({ x: 10, y: 20 }, { x: 20, y: -25 });
+    const snapshot = clone(state);
+
+    cameraTarget(state);
+
+    expect(state).toEqual(snapshot);
+  });
+
+  it("snaps without mutating simulation state", () => {
+    const state = makeState({ x: 5, y: 9 }, { x: 10, y: -10 });
+    const snapshot = clone(state);
+    const camera = createCamera();
+
+    snapCamera(camera, state);
+
+    expect(state).toEqual(snapshot);
+  });
+
+  it("eases without mutating simulation state", () => {
+    const state = makeState({ x: 100, y: 50 }, { x: 12, y: -4 });
+    const snapshot = clone(state);
+    const camera = { x: 0, y: 0, ready: true };
+
+    updateCamera(camera, state, 1 / 60);
+
+    expect(state).toEqual(snapshot);
   });
 
   describe("cameraTarget", () => {
@@ -109,6 +153,24 @@ describe("camera helpers", () => {
     expect(camera.ready).toBe(true);
   });
 
+  it.each([
+    [0, 0],
+    [1 / 120, 1 - Math.exp(-CAMERA_RESPONSE * (1 / 120))],
+    [0.05, 1 - Math.exp(-CAMERA_RESPONSE * 0.05)],
+    [0.1, 1 - Math.exp(-CAMERA_RESPONSE * 0.1)],
+    [0.25, 1 - Math.exp(-CAMERA_RESPONSE * 0.1)],
+    [10, 1 - Math.exp(-CAMERA_RESPONSE * 0.1)],
+  ])("uses the exponential blend for a %s s step", (deltaSeconds, blend) => {
+    const camera = { x: 0, y: 0, ready: true };
+    const state = makeState({ x: 100, y: 50 });
+
+    updateCamera(camera, state, deltaSeconds);
+
+    expect(camera.x).toBeCloseTo(100 * blend, 12);
+    expect(camera.y).toBeCloseTo(58 * blend, 12);
+    expect(camera.ready).toBe(true);
+  });
+
   describe("worldToScreen", () => {
     const viewport = { width: 800, height: 600, scale: 2.5, dpr: 1.5 };
     const camera = { x: 13, y: -7, ready: true };
@@ -119,6 +181,37 @@ describe("camera helpers", () => {
 
     it("applies scale and camera offsets with the y axis inverted", () => {
       expect(worldToScreen(viewport, camera, 17, -1)).toEqual({ x: 410, y: 285 });
+    });
+
+    it.each([
+      [3, 4, 3, 4, 1, 200, 300],
+      [5, 4, 3, 4, 2, 204, 300],
+      [-3, 12, 2, 2, 2, 190, 280],
+      [0, 0, 0, 0, 2, 200, 300],
+    ])(
+      "projects point (%s, %s) with camera (%s, %s) at scale %s",
+      (pointX, pointY, cameraX, cameraY, scale, expectedX, expectedY) => {
+        const point = worldToScreen(
+          { width: 400, height: 600, scale, dpr: 2 },
+          { x: cameraX, y: cameraY, ready: true },
+          pointX,
+          pointY,
+        );
+
+        expect(point).toEqual({ x: expectedX, y: expectedY });
+      },
+    );
+
+    it("ignores device pixel ratio because it works in CSS pixels", () => {
+      const point = worldToScreen(viewport, camera, 17, -1);
+      const withOtherDpr = worldToScreen(
+        { ...viewport, dpr: 2 },
+        camera,
+        17,
+        -1,
+      );
+
+      expect(withOtherDpr).toEqual(point);
     });
   });
 });

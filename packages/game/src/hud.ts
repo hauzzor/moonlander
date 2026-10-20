@@ -1,18 +1,72 @@
-import type { SimState } from "@moonlander/sim";
+import type { Action, SimState } from "@moonlander/sim";
 import { getHudElement } from "./dom";
 
 export interface HudController {
   update(state: SimState, autopilotActive: boolean): void;
 }
 
+export interface HudValues {
+  hull: number;
+  speed: number;
+  progress: number;
+  score: number;
+  thrusters: Action;
+  autopilotActive: boolean;
+}
+
+export function computeHudValues(
+  state: SimState,
+  autopilotActive: boolean,
+): HudValues {
+  const flying = state.outcome === "flying";
+
+  return {
+    hull: state.hull,
+    speed: Math.hypot(state.ship.velocity.x, state.ship.velocity.y),
+    progress: Math.max(0, Math.floor(state.progress)),
+    score: state.score,
+    thrusters: {
+      left: flying && state.thrusters.left,
+      right: flying && state.thrusters.right,
+      rear: flying && state.thrusters.rear,
+    },
+    autopilotActive,
+  };
+}
+
+function findChild(
+  element: HTMLElement,
+  selector: string,
+): HTMLElement | null {
+  if (typeof element.querySelector !== "function") {
+    return null;
+  }
+
+  const child = element.querySelector(selector);
+  return child === null ? null : (child as HTMLElement);
+}
+
+function toggleClass(
+  element: HTMLElement,
+  name: string,
+  force: boolean,
+): void {
+  const classList = element.classList as DOMTokenList | undefined;
+
+  if (classList !== undefined && typeof classList.toggle === "function") {
+    classList.toggle(name, force);
+  }
+}
+
 function setHudValue(
   element: HTMLElement,
-  dataValue: string,
+  dataValue: number,
   displayValue: string,
 ): void {
-  element.setAttribute("data-value", dataValue);
-  const value = element.querySelector(".hud-value");
-  if (value instanceof HTMLElement) {
+  element.setAttribute("data-value", String(dataValue));
+  const value = findChild(element, ".hud-value");
+
+  if (value !== null) {
     value.textContent = displayValue;
   }
 }
@@ -26,52 +80,66 @@ export function createHud(): HudController {
   const thrusterRight = getHudElement("thruster-right");
   const thrusterRear = getHudElement("thruster-rear");
   const autopilotStatus = getHudElement("autopilot-status");
-  const autopilotValue = autopilotStatus.querySelector(".autopilot-value");
+  const autopilotValue = findChild(autopilotStatus, ".autopilot-value");
   const seedDisplay = getHudElement("seed-display");
   const outcome = getHudElement("outcome");
-  const outcomeText = outcome.querySelector(".outcome-text");
-  const outcomeScore = outcome.querySelector(".outcome-score-value");
+  const outcomeText = findChild(outcome, ".outcome-text");
+  const outcomeScore = findChild(outcome, ".outcome-score-value");
 
   const updateOutcome = (state: SimState): void => {
     const destroyed = state.outcome === "destroyed";
-    outcome.classList.toggle("hidden", !destroyed);
+    toggleClass(outcome, "hidden", !destroyed);
     outcome.setAttribute("aria-hidden", String(!destroyed));
 
     if (!destroyed) {
       return;
     }
 
-    if (outcomeText instanceof HTMLElement) {
+    if (outcomeText !== null) {
       outcomeText.textContent = "Starship Destroyed";
     }
-    if (outcomeScore instanceof HTMLElement) {
+
+    if (outcomeScore !== null) {
       outcomeScore.textContent = String(state.score);
     }
   };
 
   return {
     update(state: SimState, autopilotActive: boolean): void {
-      const speed = Math.hypot(state.ship.velocity.x, state.ship.velocity.y);
-      const progress = Math.max(0, Math.floor(state.progress));
-      const flying = state.outcome === "flying";
-      const leftActive = flying && state.thrusters.left;
-      const rightActive = flying && state.thrusters.right;
-      const rearActive = flying && state.thrusters.rear;
+      const values = computeHudValues(state, autopilotActive);
 
-      setHudValue(hudHull, String(state.hull), String(Math.round(state.hull)));
-      setHudValue(hudSpeed, String(speed), speed.toFixed(1));
-      setHudValue(hudProgress, String(progress), String(progress));
-      setHudValue(hudScore, String(state.score), String(state.score));
+      setHudValue(hudHull, values.hull, String(Math.round(values.hull)));
+      setHudValue(hudSpeed, values.speed, values.speed.toFixed(1));
+      setHudValue(hudProgress, values.progress, String(values.progress));
+      setHudValue(hudScore, values.score, String(values.score));
 
-      thrusterLeft.setAttribute("data-active", String(leftActive));
-      thrusterRight.setAttribute("data-active", String(rightActive));
-      thrusterRear.setAttribute("data-active", String(rearActive));
-      hudHull.classList.toggle("hud-critical", state.hull <= 30);
+      thrusterLeft.setAttribute(
+        "data-active",
+        String(values.thrusters.left),
+      );
+      thrusterRight.setAttribute(
+        "data-active",
+        String(values.thrusters.right),
+      );
+      thrusterRear.setAttribute(
+        "data-active",
+        String(values.thrusters.rear),
+      );
 
-      autopilotStatus.setAttribute("data-active", String(autopilotActive));
-      autopilotStatus.classList.toggle("autopilot-on", autopilotActive);
-      if (autopilotValue instanceof HTMLElement) {
-        autopilotValue.textContent = autopilotActive
+      toggleClass(hudHull, "hud-critical", values.hull <= 30);
+
+      autopilotStatus.setAttribute(
+        "data-active",
+        String(values.autopilotActive),
+      );
+      toggleClass(
+        autopilotStatus,
+        "autopilot-on",
+        values.autopilotActive,
+      );
+
+      if (autopilotValue !== null) {
+        autopilotValue.textContent = values.autopilotActive
           ? "AUTOPILOT"
           : "MANUAL";
       }

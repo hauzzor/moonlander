@@ -206,6 +206,71 @@ describe("absolute-angle hull-rim eye sensor", () => {
     expect(reading.distances.every(Number.isFinite)).toBe(true);
   });
 
+  it.each([
+    { label: "NaN", value: Number.NaN },
+    { label: "Infinity", value: Number.POSITIVE_INFINITY },
+    { label: "-Infinity", value: Number.NEGATIVE_INFINITY },
+  ])(
+    "falls back to the default radius for $label in options and setEyeSensorRadius",
+    ({ value }) => {
+      const fromOption = sim.createSimulation({ eyeSensorRadius: value }).getState();
+      expect(fromOption.eyeSensorRadius).toBe(sim.EYE_SENSOR_VIEW_DEFAULT);
+      expect(fromOption.sensors.eye.radius).toBe(sim.EYE_SENSOR_VIEW_DEFAULT);
+
+      const simulation = createSimulationWithField(createWideTunnelField());
+      simulation.setEyeSensorRadius(value);
+      expect(simulation.getState().eyeSensorRadius).toBe(
+        sim.EYE_SENSOR_VIEW_DEFAULT,
+      );
+      expect(simulation.getState().sensors.eye.radius).toBe(
+        sim.EYE_SENSOR_VIEW_DEFAULT,
+      );
+    },
+  );
+
+  it("uses a radius configured mid-interval only at the next scheduled scan", () => {
+    const simulation = createSimulationWithField(createWideTunnelField());
+
+    for (let tick = 0; tick < 60; tick += 1) {
+      simulation.step(noThrusters);
+    }
+    simulation.setEyeSensorRadius(150);
+
+    const beforeScan = simulation.getState();
+    expect(beforeScan.tick).toBe(60);
+    expect(beforeScan.eyeSensorRadius).toBe(150);
+    expect(beforeScan.sensors.eye.radius).toBe(sim.EYE_SENSOR_VIEW_DEFAULT);
+
+    let state = beforeScan;
+    for (let tick = 60; tick < 120; tick += 1) {
+      state = simulation.step(noThrusters);
+    }
+
+    expect(state.tick).toBe(120);
+    expect(state.eyeSensorRadius).toBe(150);
+    expect(state.sensors.eye.tick).toBe(120);
+    expect(state.sensors.eye.radius).toBe(150);
+    expectDistancesWithinRadius(state.sensors.eye);
+  });
+
+  it("keeps a pending radius change across reset and scans it at tick zero", () => {
+    const simulation = sim.createSimulation({ seed: 11, eyeSensorRadius: 80 });
+    simulation.setEyeSensorRadius(250);
+
+    expect(simulation.getState().eyeSensorRadius).toBe(sim.EYE_SENSOR_VIEW_MAX);
+    expect(simulation.getState().sensors.eye.radius).toBe(80);
+
+    const reset = simulation.reset(29);
+
+    expect(reset.seed).toBe(29);
+    expect(reset.tick).toBe(0);
+    expect(reset.eyeSensorRadius).toBe(sim.EYE_SENSOR_VIEW_MAX);
+    expect(reset.sensors.eye.radius).toBe(sim.EYE_SENSOR_VIEW_MAX);
+    expect(reset.sensors.eye.tick).toBe(0);
+    expect(reset.sensors.eye.origin).toEqual(reset.ship.position);
+    expectDistancesWithinRadius(reset.sensors.eye);
+  });
+
   it("scans a negative-x pose and a bent real tunnel at absolute world angles", () => {
     const field = sim.createField(314159);
     for (const x of [-200, 300, 600]) {

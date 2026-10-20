@@ -7,6 +7,7 @@ import {
   createWideTunnelField,
   noThrusters,
   sim,
+  tunnelContactY,
 } from "./helpers";
 
 const observationKeys = [
@@ -107,11 +108,13 @@ describe("tunnel-aware autonomy observation API", () => {
     expectFiniteObservation(observation);
   });
 
-  it("projects velocity onto the tangent and normal of a sloped tunnel", () => {
+  it("projects velocity and center offset onto the tangent and normal of a sloped tunnel", () => {
     const slope = 0.2;
     const heading = Math.atan(slope);
     const expectedForwardSpeed = 5;
     const expectedLateralSpeed = 2;
+    const verticalOffset = 65 - (60 + slope * 10);
+    const expectedCenterOffset = verticalOffset * Math.cos(heading);
     const velocity = {
       x: expectedForwardSpeed * Math.cos(heading) - expectedLateralSpeed * Math.sin(heading),
       y: expectedForwardSpeed * Math.sin(heading) + expectedLateralSpeed * Math.cos(heading),
@@ -122,10 +125,54 @@ describe("tunnel-aware autonomy observation API", () => {
     );
     const observation = simulation.getObservation();
 
-    expect(observation.tunnelCenterOffset).toBeCloseTo(3, 12);
+    expect(observation.tunnelCenterOffset).toBeCloseTo(
+      expectedCenterOffset,
+      12,
+    );
+    expect(observation.tunnelCenterOffset).not.toBeCloseTo(verticalOffset, 6);
     expect(observation.tunnelHeading).toBeCloseTo(heading, 12);
     expect(observation.forwardSpeed).toBeCloseTo(expectedForwardSpeed, 12);
     expect(observation.lateralSpeed).toBeCloseTo(expectedLateralSpeed, 12);
+    expectFiniteObservation(observation);
+  });
+
+  it("reports the perpendicular center offset, local half-width, heading, and clearance in a bent tunnel", () => {
+    const field = sim.createField(7);
+    const verticalOffset = 6;
+    let x = 250;
+    while (
+      x < 5_000 &&
+      (Math.abs(field.tunnel.halfWidthAt(x) - sim.TUNNEL_HALF_WIDTH) < 5 ||
+        Math.abs(field.tunnel.headingAt(x)) < 0.2)
+    ) {
+      x += 10;
+    }
+
+    expect(x).toBeLessThan(5_000);
+    const center = field.tunnel.centerAt(x);
+    const heading = field.tunnel.headingAt(x);
+    const expectedCenterOffset = verticalOffset * Math.cos(heading);
+    const simulation = sim.createSimulation({
+      field,
+      start: { position: { x, y: center.y + verticalOffset } },
+    });
+    const observation = simulation.getObservation();
+
+    expect(observation.tunnelHalfWidth).toBeCloseTo(
+      field.tunnel.halfWidthAt(x),
+      12,
+    );
+    expect(observation.tunnelHalfWidth).not.toBe(sim.TUNNEL_HALF_WIDTH);
+    expect(observation.tunnelHeading).toBeCloseTo(heading, 12);
+    expect(observation.tunnelCenterOffset).toBeCloseTo(
+      expectedCenterOffset,
+      12,
+    );
+    expect(observation.tunnelCenterOffset).not.toBeCloseTo(verticalOffset, 6);
+    expect(observation.nearestWallDistance).toBeGreaterThan(0);
+    expect(observation.nearestWallDistance).toBeLessThanOrEqual(
+      sim.WALL_SENSOR_RANGE,
+    );
     expectFiniteObservation(observation);
   });
 
@@ -161,6 +208,78 @@ describe("tunnel-aware autonomy observation API", () => {
     }
 
     expect(simulation.getObservation().y).not.toBe(before.y);
+  });
+
+  it("exposes the configured radius separately from the last scan radius", () => {
+    const simulation = createSimulationWithField(createWideTunnelField());
+    simulation.setEyeSensorRadius(80);
+
+    const beforeScan = simulation.getObservation();
+    expect(beforeScan.eyeSensorRadius).toBe(80);
+    expect(beforeScan.sensors.eye.radius).toBe(sim.EYE_SENSOR_VIEW_DEFAULT);
+    expectFiniteObservation(beforeScan);
+
+    for (let tick = 0; tick < 120; tick += 1) {
+      simulation.step(noThrusters);
+    }
+    const afterScan = simulation.getObservation();
+
+    expect(afterScan.eyeSensorRadius).toBe(80);
+    expect(afterScan.sensors.eye.radius).toBe(80);
+    expect(afterScan.sensors.eye.tick).toBe(120);
+    expectFiniteObservation(afterScan);
+  });
+
+  it("keeps every observation field finite after destruction", () => {
+    const { floor } = tunnelContactY();
+    const simulation = createSimulationWithField(createControlledField(), {
+      hull: 1,
+      start: {
+        position: { x: 40, y: floor + 0.005 },
+        velocity: { x: 0, y: -8 },
+      },
+    });
+    let state = simulation.getState();
+    for (let tick = 0; tick < 10 && state.outcome === "flying"; tick += 1) {
+      state = simulation.step(noThrusters);
+    }
+
+    expect(state.outcome).toBe("destroyed");
+    expect(state.hull).toBe(0);
+
+    const frozen = simulation.getObservation();
+    expectFiniteObservation(frozen);
+    expect(frozen.hull).toBe(0);
+    expect(frozen.progress).toBe(state.progress);
+    expect(frozen.score).toBe(state.score);
+    expect(frozen.sensors.eye).toEqual(state.sensors.eye);
+    expect(simulation.getObservation()).toEqual(frozen);
+  });
+
+  it("returns spawn-based observations after reset in a pinned field", () => {
+    const field = createControlledField({ seed: 41 });
+    const simulation = createSimulationWithField(field, {
+      eyeSensorRadius: 60,
+    });
+    for (let tick = 0; tick < 30; tick += 1) {
+      simulation.step(tick % 2 === 0 ? bothThrusters : noThrusters);
+    }
+    simulation.setEyeSensorRadius(90);
+
+    const reset = simulation.reset(999);
+    const observation = simulation.getObservation();
+
+    expect(reset.tick).toBe(0);
+    expect(observation.x).toBe(0);
+    expect(observation.y).toBe(60);
+    expect(observation.progress).toBe(0);
+    expect(observation.score).toBe(0);
+    expect(observation.sensors.distanceToStart).toBe(0);
+    expect(observation.eyeSensorRadius).toBe(90);
+    expect(observation.sensors.eye.radius).toBe(90);
+    expect(observation.sensors.eye.tick).toBe(0);
+    expect(simulation.field).toBe(field);
+    expectFiniteObservation(observation);
   });
 
   it("types tunnel-aware controllers and deterministically replays their actions", () => {

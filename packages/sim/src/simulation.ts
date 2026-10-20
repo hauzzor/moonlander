@@ -1,15 +1,13 @@
 import {
-  ANGULAR_DRAG,
   DAMAGE_SCALE,
   DAMAGE_SPEED_THRESHOLD,
   DEFAULT_SEED,
+  EYE_SENSOR_INTERVAL_SECONDS,
+  EYE_SENSOR_VIEW_DEFAULT,
   FIXED_DT,
   GRAVITY,
   INITIAL_HULL,
-  EYE_SENSOR_INTERVAL_SECONDS,
-  EYE_SENSOR_VIEW_DEFAULT,
   INVULNERABILITY_SECONDS,
-  LINEAR_DRAG,
   SHIP_INERTIA,
   SHIP_MASS,
   START_POSITION,
@@ -20,7 +18,11 @@ import {
 } from "./collision";
 import { createField } from "./field";
 import { clamp } from "./geometry";
-import { thrusterEffect } from "./physics";
+import {
+  applyAngularDrag,
+  applyLinearDrag,
+  thrusterEffect,
+} from "./physics";
 import { clampEyeSensorRadius, scanEyeSensor } from "./sensor";
 import type {
   Action,
@@ -37,7 +39,9 @@ import type {
   Vec2,
 } from "./types";
 
-const INVULNERABILITY_TICKS = Math.round(INVULNERABILITY_SECONDS / FIXED_DT);
+const INVULNERABILITY_TICKS = Math.round(
+  INVULNERABILITY_SECONDS / FIXED_DT,
+);
 const EYE_SENSOR_INTERVAL_TICKS = Math.round(
   EYE_SENSOR_INTERVAL_SECONDS / FIXED_DT,
 );
@@ -58,6 +62,10 @@ function copyVec(vector: Vec2): Vec2 {
   return { x: vector.x, y: vector.y };
 }
 
+function idleThrusters(): Action {
+  return { left: false, right: false, rear: false };
+}
+
 function initialBody(start: ShipStart | undefined): ShipState {
   return {
     position: start?.position ? copyVec(start.position) : copyVec(START_POSITION),
@@ -73,27 +81,24 @@ function initialCurrent(
   eyeSensorRadius: number,
   field: Field,
 ): Current {
+  const clampedHull = clamp(hull, 0, INITIAL_HULL);
+  const position = copyVec(body.position);
+
   return {
     tick: 0,
     body: {
-      position: copyVec(body.position),
+      position,
       velocity: copyVec(body.velocity),
       angle: body.angle,
       angularVelocity: body.angularVelocity,
     },
-    hull: clamp(hull, 0, INITIAL_HULL),
+    hull: clampedHull,
     invulnerableTicksRemaining: 0,
-    thrusters: { left: false, right: false, rear: false },
-    outcome: hull <= 0 ? "destroyed" : "flying",
+    thrusters: idleThrusters(),
+    outcome: clampedHull <= 0 ? "destroyed" : "flying",
     progress: 0,
     eyeSensorRadius,
-    eyeSensor: scanEyeSensor(
-      field,
-      body.position,
-      body.angle,
-      eyeSensorRadius,
-      0,
-    ),
+    eyeSensor: scanEyeSensor(field, position, body.angle, eyeSensorRadius, 0),
   };
 }
 
@@ -108,10 +113,7 @@ function sensorSuiteFor(current: Current, spawn: Vec2): SensorSuite {
   return {
     eye: current.eyeSensor,
     direction: { angle: normalizeAngle(current.body.angle) },
-    distanceToStart: Math.hypot(
-      position.x - spawn.x,
-      position.y - spawn.y,
-    ),
+    distanceToStart: Math.hypot(position.x - spawn.x, position.y - spawn.y),
     velocity: {
       vx: velocity.x,
       vy: velocity.y,
@@ -125,11 +127,7 @@ function scoreFor(progress: number): number {
   return Math.floor(progress);
 }
 
-function toSimState(
-  current: Current,
-  seed: number,
-  spawn: Vec2,
-): SimState {
+function toSimState(current: Current, seed: number, spawn: Vec2): SimState {
   return {
     tick: current.tick,
     time: current.tick * FIXED_DT,
@@ -162,8 +160,8 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
 
   const bodyTemplate = initialBody(options.start);
   const hullTemplate = options.hull ?? INITIAL_HULL;
-  const spawnPosition = copyVec(bodyTemplate.position);
-  const spawnX = spawnPosition.x;
+  const spawn = copyVec(bodyTemplate.position);
+  const spawnX = spawn.x;
   let configuredEyeSensorRadius = clampEyeSensorRadius(
     options.eyeSensorRadius ?? EYE_SENSOR_VIEW_DEFAULT,
   );
@@ -175,7 +173,7 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
   );
 
   const getState = (): SimState =>
-    toSimState(current, activeField.seed, spawnPosition);
+    toSimState(current, activeField.seed, spawn);
 
   const getObservation = (): Observation => {
     const { position, velocity } = current.body;
@@ -199,13 +197,15 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         position,
         current.body.angle,
       ),
-      tunnelCenterOffset: position.y - center.y,
-      tunnelHalfWidth: activeField.tunnel.halfWidth,
+      tunnelCenterOffset:
+        (position.x - center.x) * normal.x +
+        (position.y - center.y) * normal.y,
+      tunnelHalfWidth: activeField.tunnel.halfWidthAt(position.x),
       tunnelHeading: heading,
       forwardSpeed: velocity.x * tangent.x + velocity.y * tangent.y,
       lateralSpeed: velocity.x * normal.x + velocity.y * normal.y,
       eyeSensorRadius: current.eyeSensorRadius,
-      sensors: sensorSuiteFor(current, spawnPosition),
+      sensors: sensorSuiteFor(current, spawn),
     };
   };
 
@@ -221,21 +221,22 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       }
 
       const effect = thrusterEffect(current.body.angle, action);
-      const linearDamping = 1 + LINEAR_DRAG * FIXED_DT;
-      const angularDamping = 1 + ANGULAR_DRAG * FIXED_DT;
-      const velocity: Vec2 = {
-        x:
-          (current.body.velocity.x + (effect.force.x / SHIP_MASS) * FIXED_DT) /
-          linearDamping,
-        y:
-          (current.body.velocity.y +
-            (effect.force.y / SHIP_MASS - GRAVITY) * FIXED_DT) /
-          linearDamping,
-      };
-      const angularVelocity =
-        (current.body.angularVelocity +
-          (effect.torque / SHIP_INERTIA) * FIXED_DT) /
-        angularDamping;
+      const velocity = applyLinearDrag(
+        {
+          x:
+            current.body.velocity.x +
+            (effect.force.x / SHIP_MASS) * FIXED_DT,
+          y:
+            current.body.velocity.y +
+            (effect.force.y / SHIP_MASS - GRAVITY) * FIXED_DT,
+        },
+        FIXED_DT,
+      );
+      const angularVelocity = applyAngularDrag(
+        current.body.angularVelocity +
+          (effect.torque / SHIP_INERTIA) * FIXED_DT,
+        FIXED_DT,
+      );
 
       const advanced = advanceWithCollisions(
         activeField,
@@ -246,17 +247,12 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         FIXED_DT,
       );
 
-      let invulnerableTicksRemaining = current.invulnerableTicksRemaining;
-      const wasInvulnerable = invulnerableTicksRemaining > 0;
-      if (wasInvulnerable) {
-        invulnerableTicksRemaining -= 1;
-      }
-
+      const wasInvulnerable = current.invulnerableTicksRemaining > 0;
+      let invulnerableTicksRemaining = wasInvulnerable
+        ? current.invulnerableTicksRemaining - 1
+        : 0;
       let hull = current.hull;
-      if (
-        !wasInvulnerable &&
-        advanced.maxImpactSpeed > DAMAGE_SPEED_THRESHOLD
-      ) {
+      if (!wasInvulnerable && advanced.maxImpactSpeed > DAMAGE_SPEED_THRESHOLD) {
         const damage = Math.max(
           1,
           Math.round(
@@ -272,7 +268,7 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         Math.max(0, advanced.position.x - spawnX),
       );
       const tick = current.tick + 1;
-      const outcome = hull <= 0 ? "destroyed" : "flying";
+      const outcome: RunOutcome = hull <= 0 ? "destroyed" : "flying";
       const eyeSensor =
         outcome === "flying" && tick % EYE_SENSOR_INTERVAL_TICKS === 0
           ? scanEyeSensor(

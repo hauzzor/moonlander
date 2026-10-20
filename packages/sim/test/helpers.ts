@@ -118,6 +118,17 @@ export function createWideTunnelField(seed = 71): Field {
   return createControlledField({ seed, halfWidth: 1_000_000, walls: false });
 }
 
+export function tunnelContactY(halfWidth = sim.TUNNEL_HALF_WIDTH): {
+  floor: number;
+  ceiling: number;
+} {
+  const clearance = halfWidth - sim.SHIP_RADIUS - sim.WALL_RADIUS;
+  return {
+    floor: sim.TUNNEL_CENTER_Y - clearance,
+    ceiling: sim.TUNNEL_CENTER_Y + clearance,
+  };
+}
+
 export function createSimulationWithField(
   field: Field,
   options: Omit<SimulationOptions, "field"> = {},

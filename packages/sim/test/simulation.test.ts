@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Action, ShipStart } from "../src/index";
+import type { Action, ShipStart, SimState } from "../src/index";
+import {
+  applyAngularDrag,
+  applyLinearDrag,
+  thrusterEffect,
+} from "../src/physics";
 import {
   bothThrusters,
   createControlledField,
@@ -8,6 +13,7 @@ import {
   noThrusters,
   rearOnly,
   sim,
+  tunnelContactY,
 } from "./helpers";
 
 const leftThruster: Action = { left: true, right: false, rear: false };
@@ -132,6 +138,98 @@ describe("fixed-step tunnel simulation", () => {
     expect(second.tick).toBe(2);
     expect(second.time).toBe(2 * sim.FIXED_DT);
   });
+
+  it("advances exactly 120 fixed steps per simulated second", () => {
+    const simulation = damageFreeSimulation();
+    let state = simulation.getState();
+
+    for (let tick = 1; tick <= 120; tick += 1) {
+      state = simulation.step(noThrusters);
+      expect(state.tick).toBe(tick);
+      expect(state.time).toBe(tick * sim.FIXED_DT);
+    }
+
+    expect(state.time).toBeCloseTo(1, 12);
+  });
+
+  it("applies thrust, gravity, and torque before drag and integrates the dragged velocity", () => {
+    const action = leftThruster;
+    const simulation = damageFreeSimulation();
+    const before = simulation.getState();
+    const dt = sim.FIXED_DT;
+    const effect = thrusterEffect(before.ship.angle, action);
+    const expectedVelocity = applyLinearDrag(
+      {
+        x: before.ship.velocity.x + (effect.force.x / sim.SHIP_MASS) * dt,
+        y:
+          before.ship.velocity.y +
+          (effect.force.y / sim.SHIP_MASS - sim.GRAVITY) * dt,
+      },
+      dt,
+    );
+    const expectedAngularVelocity = applyAngularDrag(
+      before.ship.angularVelocity + (effect.torque / sim.SHIP_INERTIA) * dt,
+      dt,
+    );
+
+    const state = simulation.step(action);
+
+    expect(state.ship.velocity.x).toBeCloseTo(expectedVelocity.x, 13);
+    expect(state.ship.velocity.y).toBeCloseTo(expectedVelocity.y, 13);
+    expect(state.ship.angularVelocity).toBeCloseTo(
+      expectedAngularVelocity,
+      13,
+    );
+    expect(state.ship.position.x).toBeCloseTo(
+      before.ship.position.x + expectedVelocity.x * dt,
+      13,
+    );
+    expect(state.ship.position.y).toBeCloseTo(
+      before.ship.position.y + expectedVelocity.y * dt,
+      13,
+    );
+    expect(state.ship.angle).toBeCloseTo(
+      before.ship.angle + expectedAngularVelocity * dt,
+      13,
+    );
+    expect(state.thrusters).toEqual(action);
+  });
+
+  it.each([
+    {
+      action: leftThruster,
+      check: (state: SimState) => {
+        expect(state.ship.velocity.x).toBeGreaterThan(0);
+        expect(state.ship.angularVelocity).toBeLessThan(0);
+      },
+    },
+    {
+      action: rightThruster,
+      check: (state: SimState) => {
+        expect(state.ship.velocity.x).toBeLessThan(0);
+        expect(state.ship.angularVelocity).toBeGreaterThan(0);
+      },
+    },
+    {
+      action: rearOnly,
+      check: (state: SimState) => {
+        expect(state.ship.velocity.x).toBeGreaterThan(0);
+        expect(state.ship.angularVelocity).toBe(0);
+      },
+    },
+  ])(
+    "applies $action on the first tick with no extra control latency",
+    ({ action, check }) => {
+      const simulation = damageFreeSimulation();
+      expect(simulation.getState().thrusters).toEqual(noThrusters);
+
+      const state = simulation.step(action);
+
+      expect(state.tick).toBe(1);
+      expect(state.thrusters).toEqual(action);
+      check(state);
+    },
+  );
 
   it("applies gravity and discrete linear drag on the first no-thrust tick", () => {
     const state = damageFreeSimulation().step(noThrusters);
@@ -476,5 +574,85 @@ describe("fixed-step tunnel simulation", () => {
       angle: -0.2,
       angularVelocity: 0.15,
     });
+  });
+
+  it.each([
+    { hull: 150, expectedHull: 100, expectedOutcome: "flying" as const },
+    { hull: 100, expectedHull: 100, expectedOutcome: "flying" as const },
+    { hull: 0, expectedHull: 0, expectedOutcome: "destroyed" as const },
+    { hull: -10, expectedHull: 0, expectedOutcome: "destroyed" as const },
+  ])(
+    "clamps the hull option $hull to $expectedHull and outcome $expectedOutcome",
+    ({ hull, expectedHull, expectedOutcome }) => {
+      const state = sim.createSimulation({ hull }).getState();
+
+      expect(state.hull).toBe(expectedHull);
+      expect(state.outcome).toBe(expectedOutcome);
+      expect(state.hull).toBeGreaterThanOrEqual(0);
+      expect(state.hull).toBeLessThanOrEqual(sim.INITIAL_HULL);
+    },
+  );
+
+  it.each([1, 7, 42, 1234])(
+    "replays an identical 240-tick state sequence for seed %i",
+    (seed) => {
+      const first = sim.createSimulation({ seed });
+      const second = sim.createSimulation({ seed });
+      const actions = [
+        noThrusters,
+        leftThruster,
+        rightThruster,
+        bothThrusters,
+        rearOnly,
+      ];
+
+      for (let tick = 0; tick < 240; tick += 1) {
+        const action = actions[tick % actions.length]!;
+        expect(first.step(action)).toEqual(second.step(action));
+      }
+    },
+  );
+
+  it("reset during flight and after destruction restores the run and keeps the eye radius", () => {
+    const { floor } = tunnelContactY();
+    const simulation = createSimulationWithField(createControlledField(), {
+      start: {
+        position: { x: 40, y: floor + 0.005 },
+        velocity: { x: 0, y: -100 },
+      },
+    });
+    simulation.setEyeSensorRadius(77);
+
+    const destroyed = simulation.step(noThrusters);
+    expect(destroyed.outcome).toBe("destroyed");
+    expect(destroyed.hull).toBe(0);
+
+    const afterDestruction = simulation.reset();
+    expect(afterDestruction).toMatchObject({
+      tick: 0,
+      time: 0,
+      hull: 100,
+      outcome: "flying",
+      score: 0,
+      progress: 0,
+      thrusters: noThrusters,
+      eyeSensorRadius: 77,
+    });
+    expect(afterDestruction.sensors.eye).toMatchObject({ tick: 0, radius: 77 });
+
+    simulation.step(leftThruster);
+    simulation.step(bothThrusters);
+    const duringFlight = simulation.reset();
+    expect(duringFlight).toMatchObject({
+      tick: 0,
+      time: 0,
+      hull: 100,
+      outcome: "flying",
+      score: 0,
+      progress: 0,
+      thrusters: noThrusters,
+      eyeSensorRadius: 77,
+    });
+    expect(duringFlight.sensors.eye).toMatchObject({ tick: 0, radius: 77 });
   });
 });
