@@ -1,4 +1,5 @@
 import {
+  TUNNEL_MAX_HALF_WIDTH,
   TUNNEL_SAMPLE_STEP,
   WALL_RADIUS,
   type CurvedWall,
@@ -18,6 +19,13 @@ interface TunnelSample {
   center: Vec2;
 }
 
+const MIN_SAMPLE_STEP = 0.5;
+const MAX_SAMPLES = 700;
+const HAZE_HALF_WIDTH_FRACTION = 0.575;
+const RIB_SPACING = TUNNEL_SAMPLE_STEP * 3;
+const MIN_RIB_STEP = 1;
+const MAX_RIBS = 512;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -32,51 +40,95 @@ function hash32(value: number): number {
   return result >>> 0;
 }
 
+function makeSample(
+  field: Field,
+  viewport: Viewport,
+  camera: Camera,
+  x: number,
+): TunnelSample {
+  const center = field.tunnel.centerAt(x);
+  const heading = field.tunnel.headingAt(x);
+  const halfWidth = field.tunnel.halfWidthAt(x);
+  const normalX = -Math.sin(heading);
+  const normalY = Math.cos(heading);
+
+  return {
+    top: worldToScreen(
+      viewport,
+      camera,
+      center.x + normalX * halfWidth,
+      center.y + normalY * halfWidth,
+    ),
+    bottom: worldToScreen(
+      viewport,
+      camera,
+      center.x - normalX * halfWidth,
+      center.y - normalY * halfWidth,
+    ),
+    center: worldToScreen(viewport, camera, center.x, center.y),
+  };
+}
+
 function buildSamples(
   field: Field,
   viewport: Viewport,
   camera: Camera,
 ): TunnelSample[] {
-  const halfWidth = field.tunnel.halfWidth;
-  const step = TUNNEL_SAMPLE_STEP;
-  const left = camera.x - viewport.width / (2 * viewport.scale);
-  const right = camera.x + viewport.width / (2 * viewport.scale);
-  const start = Math.floor((left - step) / step) * step;
-  const end = Math.ceil((right + step) / step) * step;
-  const count = Math.max(1, Math.ceil((end - start) / step));
+  const halfSpan = viewport.width / (2 * viewport.scale);
+  const margin = TUNNEL_MAX_HALF_WIDTH + TUNNEL_SAMPLE_STEP;
+  const left = camera.x - halfSpan - margin;
+  const right = camera.x + halfSpan + margin;
+  const minimumStep = Math.max(MIN_SAMPLE_STEP, (right - left) / MAX_SAMPLES);
   const samples: TunnelSample[] = [];
+  let x = left;
 
-  for (let index = 0; index <= count; index += 1) {
-    const x = start + index * step;
-    const center = field.tunnel.centerAt(x);
-    samples.push({
-      top: worldToScreen(viewport, camera, x, center.y + halfWidth),
-      bottom: worldToScreen(viewport, camera, x, center.y - halfWidth),
-      center: worldToScreen(viewport, camera, x, center.y),
-    });
+  while (x < right) {
+    samples.push(makeSample(field, viewport, camera, x));
+    const heading = field.tunnel.headingAt(x);
+    // TUNNEL_SAMPLE_STEP is a world-space chord, so the x step shrinks with cos(heading).
+    const chordStep = TUNNEL_SAMPLE_STEP * Math.abs(Math.cos(heading));
+    x += Math.max(minimumStep, chordStep);
   }
 
+  samples.push(makeSample(field, viewport, camera, right));
   return samples;
+}
+
+function traceBand(
+  ctx: CanvasRenderingContext2D,
+  samples: readonly TunnelSample[],
+  fraction: number,
+): void {
+  const first = samples[0]!;
+  ctx.moveTo(
+    first.center.x + (first.top.x - first.center.x) * fraction,
+    first.center.y + (first.top.y - first.center.y) * fraction,
+  );
+
+  for (let index = 1; index < samples.length; index += 1) {
+    const sample = samples[index]!;
+    ctx.lineTo(
+      sample.center.x + (sample.top.x - sample.center.x) * fraction,
+      sample.center.y + (sample.top.y - sample.center.y) * fraction,
+    );
+  }
+
+  for (let index = samples.length - 1; index >= 0; index -= 1) {
+    const sample = samples[index]!;
+    ctx.lineTo(
+      sample.center.x + (sample.bottom.x - sample.center.x) * fraction,
+      sample.center.y + (sample.bottom.y - sample.center.y) * fraction,
+    );
+  }
+
+  ctx.closePath();
 }
 
 function traceInterior(
   ctx: CanvasRenderingContext2D,
   samples: readonly TunnelSample[],
 ): void {
-  const first = samples[0]!;
-  ctx.moveTo(first.top.x, first.top.y);
-
-  for (let index = 1; index < samples.length; index += 1) {
-    const top = samples[index]!.top;
-    ctx.lineTo(top.x, top.y);
-  }
-
-  for (let index = samples.length - 1; index >= 0; index -= 1) {
-    const bottom = samples[index]!.bottom;
-    ctx.lineTo(bottom.x, bottom.y);
-  }
-
-  ctx.closePath();
+  traceBand(ctx, samples, 1);
 }
 
 function drawInterior(
@@ -102,7 +154,6 @@ function drawHaze(
   ctx: CanvasRenderingContext2D,
   viewport: Viewport,
   camera: Camera,
-  field: Field,
   state: SimState,
   samples: readonly TunnelSample[],
 ): void {
@@ -134,16 +185,10 @@ function drawHaze(
   ctx.fillStyle = haze;
   ctx.fillRect(0, 0, width, height);
 
-  const first = samples[0]!;
   ctx.beginPath();
-  ctx.moveTo(first.center.x, first.center.y);
-  for (let index = 1; index < samples.length; index += 1) {
-    const center = samples[index]!.center;
-    ctx.lineTo(center.x, center.y);
-  }
-  ctx.strokeStyle = "rgba(102, 197, 214, 0.05)";
-  ctx.lineWidth = field.tunnel.halfWidth * viewport.scale * 1.15;
-  ctx.stroke();
+  traceBand(ctx, samples, HAZE_HALF_WIDTH_FRACTION);
+  ctx.fillStyle = "rgba(102, 197, 214, 0.05)";
+  ctx.fill();
   ctx.restore();
 }
 
@@ -160,7 +205,6 @@ function drawDust(
   const right = camera.x + viewport.width / (2 * viewport.scale);
   const start = Math.floor(left / spacing) - 1;
   const end = Math.ceil(right / spacing) + 1;
-  const halfWidth = field.tunnel.halfWidth;
   const speed = Math.hypot(
     state.ship.velocity.x,
     state.ship.velocity.y,
@@ -186,15 +230,23 @@ function drawDust(
     }
 
     const center = field.tunnel.centerAt(x);
-    const y = center.y + (lane * 2 - 1) * halfWidth * 0.82;
-    const screen = worldToScreen(viewport, camera, x, y);
+    const heading = field.tunnel.headingAt(x);
+    const halfWidth = field.tunnel.halfWidthAt(x);
+    const normalX = -Math.sin(heading);
+    const normalY = Math.cos(heading);
+    const laneOffset = (lane * 2 - 1) * halfWidth * 0.82;
+    const screen = worldToScreen(
+      viewport,
+      camera,
+      center.x + normalX * laneOffset,
+      center.y + normalY * laneOffset,
+    );
     const twinkle =
       0.7 + 0.3 * Math.sin(state.time * 1.8 + (hash >>> 8) * 0.0001);
     const alpha =
       (0.1 + (((hash >>> 24) & 0xff) / 255) * 0.16) * twinkle;
 
     if (streakLength > 3) {
-      const heading = field.tunnel.headingAt(x);
       const tangentX = Math.cos(heading);
       const tangentY = -Math.sin(heading);
       ctx.strokeStyle = `rgba(174, 228, 255, ${alpha})`;
@@ -224,21 +276,33 @@ function drawRibs(
   camera: Camera,
   field: Field,
 ): void {
-  const spacing = TUNNEL_SAMPLE_STEP * 3;
-  const halfWidth = field.tunnel.halfWidth;
   const left = camera.x - viewport.width / (2 * viewport.scale);
   const right = camera.x + viewport.width / (2 * viewport.scale);
-  const start = Math.floor(left / spacing) * spacing;
-  const end = Math.ceil(right / spacing) * spacing;
+  const start = Math.floor(left / RIB_SPACING) * RIB_SPACING - RIB_SPACING;
 
   ctx.save();
 
-  for (let x = start; x <= end; x += spacing) {
+  let ribs = 0;
+  let x = start;
+  while (x <= right + RIB_SPACING && ribs < MAX_RIBS) {
     const center = field.tunnel.centerAt(x);
     const heading = field.tunnel.headingAt(x);
-    const top = worldToScreen(viewport, camera, x, center.y + halfWidth);
-    const bottom = worldToScreen(viewport, camera, x, center.y - halfWidth);
-    const middle = worldToScreen(viewport, camera, x, center.y);
+    const halfWidth = field.tunnel.halfWidthAt(x);
+    const normalX = -Math.sin(heading);
+    const normalY = Math.cos(heading);
+    const top = worldToScreen(
+      viewport,
+      camera,
+      center.x + normalX * halfWidth,
+      center.y + normalY * halfWidth,
+    );
+    const bottom = worldToScreen(
+      viewport,
+      camera,
+      center.x - normalX * halfWidth,
+      center.y - normalY * halfWidth,
+    );
+    const middle = worldToScreen(viewport, camera, center.x, center.y);
     const shimmer = 0.5 + 0.5 * Math.sin(x * 0.04 + heading * 2.4);
 
     ctx.strokeStyle = `rgba(91, 161, 190, ${0.1 + shimmer * 0.07})`;
@@ -252,6 +316,13 @@ function drawRibs(
     ctx.beginPath();
     ctx.arc(middle.x, middle.y, 1.6, 0, Math.PI * 2);
     ctx.fill();
+
+    const ribStep = Math.max(
+      MIN_RIB_STEP,
+      RIB_SPACING * Math.abs(Math.cos(heading)),
+    );
+    x += ribStep;
+    ribs += 1;
   }
 
   ctx.restore();
@@ -330,9 +401,14 @@ function drawWalls(
     { x: camera.x, y: camera.y },
     viewRadius,
   );
+  const drawnWalls = new Set<string>();
 
   for (const chunk of chunks) {
     for (const wall of chunk.walls) {
+      if (drawnWalls.has(wall.id)) {
+        continue;
+      }
+      drawnWalls.add(wall.id);
       drawWall(ctx, viewport, camera, wall);
     }
   }
@@ -351,7 +427,7 @@ export function drawField(
   }
 
   drawInterior(ctx, viewport, samples);
-  drawHaze(ctx, viewport, camera, field, state, samples);
+  drawHaze(ctx, viewport, camera, state, samples);
   drawDust(ctx, viewport, camera, field, state, samples);
   drawRibs(ctx, viewport, camera, field);
   drawWalls(ctx, viewport, camera, field);
