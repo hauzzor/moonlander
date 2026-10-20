@@ -1,6 +1,8 @@
 import type { Action, Vec2 } from "./types";
 import {
+  ANGULAR_DRAG,
   LEFT_MOUNT,
+  LINEAR_DRAG,
   REAR_MOUNT,
   REAR_THRUSTER_FORCE,
   RIGHT_MOUNT,
@@ -31,6 +33,8 @@ const RIGHT_FORCE: Vec2 = {
   y: THRUSTER_FORCE * Math.cos(THRUSTER_CANT),
 };
 
+const REAR_FORCE: Vec2 = { x: REAR_THRUSTER_FORCE, y: 0 };
+
 export interface ThrusterEffect {
   force: Vec2;
   torque: number;
@@ -43,11 +47,11 @@ export function thrusterEffect(
   let forceX = 0;
   let forceY = 0;
   let torque = 0;
+
   if (action.left) {
     const force = rotate(LEFT_FORCE, angle);
     forceX += force.x;
     forceY += force.y;
-    // Rotating the lever arm and force together preserves their cross product.
     torque += crossZ(LEFT_MOUNT, LEFT_FORCE);
   }
   if (action.right) {
@@ -57,10 +61,31 @@ export function thrusterEffect(
     torque += crossZ(RIGHT_MOUNT, RIGHT_FORCE);
   }
   if (action.rear) {
-    const force = rotate({ x: REAR_THRUSTER_FORCE, y: 0 }, angle);
+    const force = rotate(REAR_FORCE, angle);
     forceX += force.x;
     forceY += force.y;
-    torque += crossZ(REAR_MOUNT, { x: REAR_THRUSTER_FORCE, y: 0 });
+    torque += crossZ(REAR_MOUNT, REAR_FORCE);
   }
+
   return { force: { x: forceX, y: forceY }, torque };
+}
+
+export function linearDragFactor(dt: number): number {
+  return 1 / (1 + LINEAR_DRAG * dt);
+}
+
+export function angularDragFactor(dt: number): number {
+  return 1 / (1 + ANGULAR_DRAG * dt);
+}
+
+export function applyLinearDrag(velocity: Vec2, dt: number): Vec2 {
+  const factor = linearDragFactor(dt);
+  return { x: velocity.x * factor, y: velocity.y * factor };
+}
+
+export function applyAngularDrag(
+  angularVelocity: number,
+  dt: number,
+): number {
+  return angularVelocity * angularDragFactor(dt);
 }
