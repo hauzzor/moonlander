@@ -119,8 +119,11 @@ open-questions: []
   `docs/templates/wave-context.md`.
 - Every ticket records a `### Test contract` with exact formulas, constants,
   expected values, thresholds, and test file names.
-- Reuse the same sim-engineer, test-engineer, and reviewer sessions across waves
-  with `task_id`; re-read changed files only.
+- Use a fresh test-engineer and reviewer for each wave. Reuse a sim-engineer
+  session only when it is below about 30 messages and 300k input tokens; re-read
+  changed files only and stop on stale assumptions or contract drift.
+- If a subagent returns empty, immediately start a fresh session with the wave
+  context card; do not retry the same long session.
 - Start review per ticket as soon as its files are stable. Leaf modules get a
   focused review packet; T-0013, T-0009, T-0011, and T-0012 get the full review.
 - After review, verify, and push, start the next wave while `release-engineer`

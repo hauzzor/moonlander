@@ -20,6 +20,8 @@ Wave 1 baseline, measured from the "go ahead" message to ticket completion:
 | Independent review | 8m07s | $0.045 |
 | Delivery (verify, push, Pages, live) | 3m47s | $0.008 |
 | Ticket evidence, status, separate push | 2m25s | $0.004 |
+| Lead coordination | — | $0.025 |
+| Dispatch and handoff gaps | 0m21s | — |
 | **Total** | **27m23s** | **~$0.230** |
 
 The critical path was the T-0005 test engineer at 10m38s, followed by the
@@ -58,9 +60,11 @@ without weakening review, verification, or test coverage.
    expected values, thresholds, and test file names before implementation. Pure
    module tests use `it.each` tables and target about 20-25 cases unless the
    ticket requires more.
-3. **Session reuse.** Reuse the same `sim-engineer`, `test-engineer`, and
-   `reviewer` sessions across waves with `task_id`. Instruct them to re-read
-   changed files only and to stop on stale assumptions or contract drift.
+3. **Guarded session use.** Use fresh `test-engineer` and `reviewer` sessions for
+   each wave. Reuse a `sim-engineer` session only when it is below about 30
+   messages and 300k input tokens. Reused sessions re-read changed files only and
+   stop on stale assumptions or contract drift. If a subagent returns empty,
+   immediately start a fresh session with the wave context card.
 4. **Concurrent per-ticket review.** Start a ticket's review as soon as its files
    are stable, while the other ticket's tests are still running. Leaf pure
    modules get a focused review packet; T-0013, T-0009, T-0011, and T-0012 get
@@ -106,7 +110,7 @@ without weakening review, verification, or test coverage.
 | Speedup scope | Quick wins plus milestone live checks | Process-only changes with no tooling risk |
 | Test authoring | Test contract card and table-driven tests | Prevent formula contradictions; reduce critical path |
 | Review | Focused packet, risk-based depth, per-ticket start | Reviewer was 8m07s and waited for the whole wave |
-| Sessions | Reuse sim/test/reviewer sessions | Avoid repeated context loading; measured ~6.4M cache reads |
+| Sessions | Fresh test/reviewer; guarded sim reuse | Wave 2 empty long-session responses; fresh sessions are reliable |
 | Delivery | Local verify every wave; live at milestones | Remove Pages wait and live suite from sim-only waves |
 | Ticket completion | Merge into delivery task | Remove the separate 2m25s bookkeeping task |
 | Pipeline | Start next wave after push | Overlap delivery tail with implementation |
@@ -205,6 +209,56 @@ None. No simulation, rendering, or public API behavior changes.
 7. Report wave 2 against the 27m23s baseline. If it is not at least 20% faster,
    stop and reassess before wave 3.
 
+## Wave 2 measurement and reassessment
+
+Measured from wave 2 dispatch (2026-10-20 19:39:09 UTC) to ticket completion
+(20:15:14 UTC): **36m05s**, about **$0.444**. This is slower than the 27m23s
+wave 1 baseline.
+
+| Phase | Wall-clock | Notes |
+| --- | --- | --- |
+| Dispatch | 12m23s | Reused test-engineer session returned empty |
+| Focused tests and typecheck | 2m44s | Includes two short bash checks |
+| Collision test recovery | 8m55s | 28 table-driven tests in the same session |
+| Review attempt | 7m15s | Reused reviewer session returned empty |
+| Review recovery | 1m40s | Same session, full report |
+| Delivery and ticket completion | 3m08s | Merged task, `--no-live` |
+| **Total** | **36m05s** | Slower than the 27m23s baseline |
+
+What worked:
+
+- Merged delivery and ticket completion took 3m08s instead of 6m12s. This is not
+  purely merge overhead: wave 1's 6m12s includes a live delivery plus a separate
+  ticket task; wave 2's 3m08s includes both in one task and skipped the live
+  suite.
+- Skipping the live suite for a sim-only wave removed the Pages wait and live
+  run.
+- The collision test recovery wrote 28 table-driven tests in 8m55s; wave 1
+  physics tests took 10m38s for 37 tests.
+- The wave 2 review recovery produced the full report in 1m40s; the new policy
+  still starts fresh instead of retrying the long session.
+
+What failed:
+
+- The dispatch phase took 12m23s; the reused test-engineer session (72 messages,
+  671k input) returned empty.
+- The reused reviewer session (58 messages, 1.16M input) returned empty after
+  7m15s.
+- The reliable reused sessions were the sim-engineer sessions (44 messages).
+
+Reassessment:
+
+1. Reuse a `sim-engineer` session only when its prior message count is below
+   about 30 and its input is below about 300k; otherwise start fresh.
+2. Use a fresh reviewer session per wave. Keep the focused review packet so the
+   fresh review is fast.
+3. If any subagent returns empty, immediately start a fresh session with a
+   compact wave-context prompt; do not retry the same long session.
+4. Keep the other quick wins: test contracts, table-driven tests, merged
+   delivery, milestone live checks.
+5. Measure wave 3 with the guard. Target at least 20% faster than the 27m23s
+   baseline. The guard was confirmed by the user on 2026-10-20.
+
 ## Open questions
 
 None.
@@ -217,4 +271,5 @@ followed by T-0009, T-0010, T-0011, and T-0012.
 
 ## Confirmation
 
-Confirmed by the user on 2026-10-20.
+Confirmed by the user on 2026-10-20. The guarded session policy was confirmed on
+the same date after the wave 2 reassessment.

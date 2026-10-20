@@ -190,9 +190,12 @@ review or verification.
   decision.
 - Every ticket records a `### Test contract` with exact formulas, constants,
   expected values, thresholds, and test file names. Prefer table-driven tests.
-- Reuse the same `sim-engineer`, `test-engineer`, and `reviewer` sessions across
-  waves with `task_id`. Tell them to re-read changed files only and stop on stale
+- Use a fresh `test-engineer` and `reviewer` for each wave. Reuse a
+  `sim-engineer` session only when it is below about 30 messages and 300k input
+  tokens. Tell reused sessions to re-read changed files only and stop on stale
   assumptions or contract drift.
+- If a subagent returns an empty result, immediately start a fresh session with
+  the wave context card; do not retry the same long session.
 - Start a ticket's review as soon as its files are stable, while the other
   ticket's tests are still running. Leaf modules get a focused review packet;
   T-0013, T-0009, T-0011, and T-0012 get the full review.
@@ -247,16 +250,15 @@ available on `backup/pre-rebuild` and in history.
   progress per seed, median at least 300 m, average world-x speed at least
   4 m/s) supersedes the older 400/500/8 values in the spec. The contract ticket
   must update the spec before implementation.
-- T-0003, T-0004, T-0005, and T-0007 are done. The remaining rebuild is
-  confirmed in `docs/changes/2026-10-20-parallel-ticket-execution.md` and runs in
-  waves:
-  1. T-0006, T-0008
-  2. T-0013, T-0015
-  3. T-0014, T-0016
-  4. T-0009
-  5. T-0010, T-0017
-  6. T-0011
-  7. T-0012
+- T-0003, T-0004, T-0005, T-0006, T-0007, and T-0008 are done. The remaining
+  rebuild is confirmed in `docs/changes/2026-10-20-parallel-ticket-execution.md`
+  and runs in waves:
+  1. T-0013, T-0015
+  2. T-0014, T-0016
+  3. T-0009
+  4. T-0010, T-0017
+  5. T-0011
+  6. T-0012
 - The confirmed wave plan supersedes the old sequential ticket order.
 - Execute waves under the fast wave protocol. Live verification runs at T-0013,
   T-0009, T-0010, T-0011, and T-0012.

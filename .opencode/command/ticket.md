@@ -20,8 +20,11 @@ wave.
 3. Confirm the tickets' scopes are disjoint. If two tickets share a file,
    serialize them or create an integration ticket.
 4. Move the wave tickets to `in-progress` and record the start.
-5. Reuse the same sim-engineer, test-engineer, and reviewer sessions with
-   `task_id`; tell them to re-read changed files only.
+5. Use a fresh test-engineer and reviewer for each wave. Reuse a sim-engineer
+   session only when it is below about 30 messages and 300k input tokens; tell
+   reused sessions to re-read changed files only and stop on stale assumptions or
+   contract drift. If a subagent returns empty, immediately start a fresh session
+   with the wave context card.
 6. Dispatch up to two implementation teams. Each team is `test-engineer` plus
    the responsible implementation engineer, working from the same acceptance
    criteria. Do not dispatch two writers to the same file.

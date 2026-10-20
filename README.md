@@ -91,8 +91,9 @@ Large requests should be split into child tickets, and every ticket declares a
 implementation tickets per wave. `npm.cmd run tickets:plan` prints scope
 conflicts and suggested waves; shared files, verification, delivery, and live
 checks are serialized. Waves use a test contract, a wave context pack, focused
-review packets, and session reuse. Local verify runs every wave; live Playwright
-runs at T-0013, T-0009, T-0010, T-0011, and T-0012.
+review packets, fresh test and review sessions, and guarded sim-engineer reuse.
+Local verify runs every wave; live Playwright runs at T-0013, T-0009, T-0010,
+T-0011, and T-0012.
 
 The runner runs in a dedicated terminal and streams claims, agent sessions,
 test results, the merge queue, and delivery status. Use

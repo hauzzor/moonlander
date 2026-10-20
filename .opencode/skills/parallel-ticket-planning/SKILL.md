@@ -1,6 +1,6 @@
 ---
 name: parallel-ticket-planning
-description: Use when creating, splitting, or executing Moonlander tickets in parallel. Covers the parallelization check, leaf/trunk splits, scope disjointness, wave planning, test contracts, focused review packets, session reuse, milestone live checks, coordination handoffs, and serialized verification and delivery. Load before dispatching concurrent implementation teams.
+description: Use when creating, splitting, or executing Moonlander tickets in parallel. Covers the parallelization check, leaf/trunk splits, scope disjointness, wave planning, test contracts, focused review packets, guarded session reuse, milestone live checks, coordination handoffs, and serialized verification and delivery. Load before dispatching concurrent implementation teams.
 ---
 
 # Parallel ticket planning
@@ -66,9 +66,12 @@ depends on physics for `rotate`, so those two are not a safe wave.
 - Every ticket records a `### Test contract` with exact formulas, constants,
   expected values, thresholds, and test file names. Prefer `it.each` tables and
   about 20-25 cases per pure module.
-- Reuse the same `sim-engineer`, `test-engineer`, and `reviewer` sessions across
-  waves with `task_id`. Tell them to re-read changed files only and stop on stale
+- Use a fresh `test-engineer` and `reviewer` for each wave. Reuse a
+  `sim-engineer` session only when it is below about 30 messages and 300k input
+  tokens. Tell reused sessions to re-read changed files only and stop on stale
   assumptions or contract drift.
+- If a subagent returns an empty result, immediately start a fresh session with
+  the wave context card; do not retry the same long session.
 - Give the reviewer a packet: diff, new test names, focused test output,
   acceptance-criteria checklist, and the wave context card.
 - Start a ticket's review as soon as its files are stable, while the other
@@ -115,5 +118,6 @@ verification order.
 - Running two Playwright suites or two deliveries at once.
 - Treating a wave plan as permission to ignore declared scopes.
 - Reusing a subagent session without re-reading changed files.
+- Reusing a long session that has already returned empty output.
 - Deferring live verification past T-0012.
 - Adding a separate parallelization agent; the lead owns this process.

@@ -108,9 +108,12 @@ credentials, a scope conflict, or contract drift. Do not guess.
 
 ## Fast wave protocol
 
-- Reuse the same `sim-engineer`, `test-engineer`, and `reviewer` sessions across
-  waves with `task_id`. Tell them to re-read changed files only and stop on stale
+- Use a fresh `test-engineer` and `reviewer` for each wave. Reuse a
+  `sim-engineer` session only when it is below about 30 messages and 300k input
+  tokens. Tell reused sessions to re-read changed files only and stop on stale
   assumptions or contract drift.
+- If a subagent returns an empty result, immediately start a fresh session with
+  the wave context card; do not retry the same long session.
 - Give the reviewer a packet: diff, new test names, focused test output,
   acceptance-criteria checklist, and the wave context card.
 - Leaf pure modules get a focused review. T-0013, T-0009, T-0011, and T-0012 get
