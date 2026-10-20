@@ -43,6 +43,14 @@ What is explicitly out of scope.
 Public types, constants, exports, module boundaries, stubs, and typecheck
 command. Use `docs/templates/contract-freeze.md`.
 
+### Test contract
+
+- Formulas and constants:
+- Expected values:
+- Thresholds:
+- Test file names:
+- Table-driven cases:
+
 ## Test matrix
 
 Copy `docs/templates/test-matrix.md` and fill every row.

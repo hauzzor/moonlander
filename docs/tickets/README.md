@@ -27,7 +27,8 @@ inbox → needs-info ↔ ready → in-progress → review → done
 - `in-progress` — claimed by the runner or the lead. Runner mode also creates a
   lock and worktree; one-session mode shares the main working tree.
 - `review` — implementation and tests are green; review/merge queue pending.
-- `done` — verified, merged, delivered, and live-tested.
+- `done` — verified, merged, and delivered; live-tested at milestones or under
+  the recorded waiver.
 - `blocked` — a recoverable failure that the runner will retry once
   automatically, or an exhausted failure awaiting the lead.
 
@@ -111,6 +112,25 @@ open-questions: []
   serialized.
 - True worktree isolation is only available in the background-runner mode. The
   one-session mode relies on disjoint scopes and one writer per file.
+
+## Fast wave protocol
+
+- Before dispatch, write `docs/tickets/logs/wave-<n>/context.md` from
+  `docs/templates/wave-context.md`.
+- Every ticket records a `### Test contract` with exact formulas, constants,
+  expected values, thresholds, and test file names.
+- Reuse the same sim-engineer, test-engineer, and reviewer sessions across waves
+  with `task_id`; re-read changed files only.
+- Start review per ticket as soon as its files are stable. Leaf modules get a
+  focused review packet; T-0013, T-0009, T-0011, and T-0012 get the full review.
+- After review, verify, and push, start the next wave while `release-engineer`
+  finishes the delivery tail. Scopes must remain disjoint, and no local edits may
+  overlap delivery verification.
+- `release-engineer` updates ticket evidence and status and pushes the queue
+  update in the same delivery task.
+- Run local `npm.cmd run verify` every wave. Run the live Playwright suite at
+  T-0013, T-0009, T-0010, T-0011, and T-0012. Sim-only intermediate waves may use
+  `--no-live` under the recorded waiver.
 
 Use YAML arrays for `scopes` and `depends-on`. The planner also parses
 comma-separated strings defensively, but the runner and queue commands expect

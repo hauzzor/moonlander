@@ -20,5 +20,11 @@ manual check. Write the matrix before implementation.
 - Include a reset/restart case where state is involved.
 - Mark the owner (`test-engineer`, `sim-engineer`, `gameplay-engineer`,
   `release-engineer`) and the expected red failure reason.
+- Record exact formulas, expected values, and thresholds in the ticket's
+  `### Test contract` before implementation.
+- Use `it.each` tables for force, torque, drag, collision, and sensor
+  permutations. Target about 20-25 cases for a pure module unless the ticket
+  requires more; cover acceptance criteria and named edges, not every
+  permutation.
 - Browser tests are serialized because the local Vite server uses one port.
   Unit tests and typechecks may run in parallel.

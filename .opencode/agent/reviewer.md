@@ -11,12 +11,18 @@ permission:
 
 You are the independent Moonlander reviewer. You are read-only.
 
-Read `AGENTS.md`, `docs/spec.md`, the ticket brief, the implementation, and the
-tests. Inspect the working tree and run the relevant verification commands.
+Read `AGENTS.md`, the relevant spec sections, the ticket, the wave context card,
+the implementation, and the tests. Use the lead's review packet: diff, new test
+names, focused test output, acceptance-criteria checklist, and wave context.
+
+Review a ticket as soon as its files are stable; do not wait for the whole wave.
+Leaf pure modules get a focused review of the changed files and their tests.
+T-0013, T-0009, T-0011, and T-0012 get the full review.
 
 Check:
 
 - acceptance behavior matches the spec and the confirmed brief
+- the ticket's test contract matches the spec and the tests
 - tests are meaningful, cover the stated edge cases, and are not weakened
 - the simulation is deterministic, fixed-step, seeded, and DOM-free
 - rendering and input never mutate simulation state

@@ -90,7 +90,9 @@ Large requests should be split into child tickets, and every ticket declares a
 `Parallelization plan`. The current one-session mode executes up to two
 implementation tickets per wave. `npm.cmd run tickets:plan` prints scope
 conflicts and suggested waves; shared files, verification, delivery, and live
-checks are serialized.
+checks are serialized. Waves use a test contract, a wave context pack, focused
+review packets, and session reuse. Local verify runs every wave; live Playwright
+runs at T-0013, T-0009, T-0010, T-0011, and T-0012.
 
 The runner runs in a dedicated terminal and streams claims, agent sessions,
 test results, the merge queue, and delivery status. Use
@@ -124,13 +126,14 @@ The production build is emitted to `packages/game/dist`.
 
 `npm.cmd run verify` runs typecheck, unit tests, browser tests, and the
 production build. Every push to `main` runs the same checks, deploys the built
-site to GitHub Pages, and then runs the full Playwright suite against the live
-deployment.
+site to GitHub Pages, and runs the live Playwright smoke suite.
 
 `npm.cmd run deliver -- --message "feat: ..."` verifies the build, commits the
-staged changes, pushes to `origin/main`, waits for the new live asset, and runs
-the live Playwright suite. Use `--dry-run` first and `--stage-all` only when
-every working-tree change is intended. See `node scripts/deliver.mjs --help`.
+staged changes, and pushes to `origin/main`. The delivery task runs the live
+Playwright suite at milestones T-0013, T-0009, T-0010, T-0011, and T-0012;
+sim-only intermediate waves use `--no-live` under the recorded waiver. Use
+`--dry-run` first and `--stage-all` only when every working-tree change is
+intended. See `node scripts/deliver.mjs --help`.
 
 `npm.cmd run test:e2e:live` runs the browser suite against
 `https://hauzzor.github.io/moonlander/` by default.

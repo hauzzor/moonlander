@@ -38,19 +38,27 @@ Read `AGENTS.md`, `docs/spec.md`, the ticket, and the existing workflows. The
 repository is public at https://github.com/hauzzor/moonlander and deploys to
 https://hauzzor.github.io/moonlander/.
 
-For every ticket delivery:
+For every wave delivery:
 
-1. Confirm `reviewer` passed and `npm.cmd run verify` is green.
+1. Confirm `reviewer` passed and the lead's local `npm.cmd run verify` is green.
 2. Inspect `git status`, `git diff`, and `git diff --cached`.
 3. Stage only the intended paths. Never commit secrets, build output, logs,
    worktrees, or unrelated changes.
 4. Use a conventional commit message such as `feat: ...`, `fix: ...`,
    `refactor: ...`, `test: ...`, `docs: ...`, or `chore: ...`.
-5. Commit and push to `origin/main` using `npm.cmd run deliver -- --message
-   "..."`, or the manual fallback. Never force-push, amend, reset, or clean.
-6. Wait for the GitHub Pages asset to update, then run
+5. Commit and push to `origin/main`:
+   - At live milestones T-0013, T-0009, T-0010, T-0011, and T-0012, use
+     `npm.cmd run deliver -- --message "..."` and run the live suite.
+   - For sim-only intermediate waves or docs-only process deliveries, use
+     `npm.cmd run deliver -- --no-live --message "..."` under the recorded
+     waiver.
+   - Delivery repeats `npm.cmd run verify` as a safety gate. Do not use
+     `--skip-verify` without explicit lead approval.
+6. At a live milestone, wait for the GitHub Pages asset to update, then run
    `npm.cmd run test:e2e:live`.
-7. If verify, push, deployment, or the live suite fails, stop and report. Do not
+7. Update ticket evidence and status under `docs/tickets/`, then commit and push
+   the queue update in the same task.
+8. If verify, push, deployment, or the live suite fails, stop and report. Do not
    hide the failure or retry with force.
 
 Requirements:
@@ -61,5 +69,6 @@ Requirements:
 - use `.cmd` executables on Windows
 
 Do not edit application code, tests, `docs/spec.md`, or change briefs. Report
-changed files, commit hash, push result, deployment URL, live suite result, and
-any settings the lead must verify.
+changed files, commit hash, push result, deployment URL, live suite result or
+recorded `--no-live` decision, ticket evidence/status, and any settings the lead
+must verify.

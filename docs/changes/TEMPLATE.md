@@ -89,7 +89,8 @@ intentional API break.
 
 ## Verification plan
 
-Commands, unit/e2e coverage, manual checks, visual checks, and delivery path.
+Commands, unit/e2e coverage, manual checks, visual checks, delivery path, and
+live cadence (every wave, milestone, or recorded waiver).
 
 ## Open questions
 

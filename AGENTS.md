@@ -8,13 +8,14 @@
 > must pass before any push. See
 > [Tests alongside implementation](#tests-alongside-implementation).
 >
-> Game code changes are ticket-based and executed sequentially in one session.
+> Game code changes are ticket-based and executed in waves in one session.
 > There is no background runner. See
-> [One-session ticket execution](#one-session-ticket-execution).
+> [One-session ticket execution and waves](#one-session-ticket-execution-and-waves).
 >
 > Only `release-engineer` commits and pushes. Delivery is a direct push to
-> `origin/main` after review and verification, followed by GitHub Pages and the
-> live Playwright suite. See [Delivery](#delivery).
+> `origin/main` after review and verification. CI deploys and runs live smoke on
+> every `main` push; the delivery task runs the live Playwright suite at
+> milestones. See [Delivery](#delivery).
 >
 > Development-cycle changes are not game code and are handled directly. See
 > [Development-cycle changes](#development-cycle-changes).
@@ -169,16 +170,46 @@ waves in the current session.
   `npm.cmd run verify`. Serialize browser suites, verify, delivery, and live
   verification. Only after review and verify pass does `release-engineer`
   commit and push.
-- The lead records evidence and moves each ticket to `done`, then continues to
-  the next wave.
+- `release-engineer` updates evidence and ticket status and pushes the queue
+  update in the same delivery task.
+- The lead starts the next wave after the push while `release-engineer` finishes
+  the delivery tail.
 - Stop on ambiguity, failing verify, rejected review, missing credentials, a
   scope conflict, or contract drift. Do not guess.
 - Ticket files are the checkpoint if the session ends. The background runner
   remains available for later use but is not used in this mode.
 
+## Fast wave protocol
+
+Use this for every wave to keep the critical path short without weakening
+review or verification.
+
+- Before dispatch, write `docs/tickets/logs/wave-<n>/context.md` from
+  `docs/templates/wave-context.md`: tickets, scopes, exact formulas and
+  signatures, test commands, known traps, review packet, and the delivery/live
+  decision.
+- Every ticket records a `### Test contract` with exact formulas, constants,
+  expected values, thresholds, and test file names. Prefer table-driven tests.
+- Reuse the same `sim-engineer`, `test-engineer`, and `reviewer` sessions across
+  waves with `task_id`. Tell them to re-read changed files only and stop on stale
+  assumptions or contract drift.
+- Start a ticket's review as soon as its files are stable, while the other
+  ticket's tests are still running. Leaf modules get a focused review packet;
+  T-0013, T-0009, T-0011, and T-0012 get the full review.
+- After review, verify, and push, start the next wave while `release-engineer`
+  finishes the delivery tail. Scopes must remain disjoint, and no local edits may
+  overlap delivery verification.
+- `release-engineer` updates ticket evidence and status and pushes the queue
+  update in the same delivery task.
+- Run local `npm.cmd run verify` every wave. Run the live Playwright suite at
+  T-0013, T-0009, T-0010, T-0011, and T-0012. Sim-only intermediate waves may
+  use `--no-live` under the recorded waiver.
+
 ## Delivery
 
-After every successful production build, `release-engineer` runs:
+Run local `npm.cmd run verify` every wave. Live delivery runs at milestones
+T-0013, T-0009, T-0010, T-0011, and T-0012. At a live milestone,
+`release-engineer` runs:
 
 ```powershell
 npm.cmd run deliver -- --message "feat: ..."
@@ -194,8 +225,10 @@ The script verifies the build, commits intended staged changes, pushes to
 - Never force-push, amend, reset `--hard`, or clean.
 - Do not commit or push a failing build.
 - Direct pushes to `main` trigger GitHub Actions and GitHub Pages.
-- Early rebuild tickets may use `--no-live` only with explicit lead approval;
-  the full live suite must pass before the final ticket.
+- Sim-only intermediate waves may use `--no-live` under the standing waiver
+  recorded in `docs/changes/2026-10-20-faster-development-cycle.md`. Docs-only
+  process deliveries may also use `--no-live` under that waiver. The full live
+  suite must pass at T-0011 and T-0012.
 - The safety branch `backup/pre-rebuild` preserves the pre-rebuild game. Do not
   delete it.
 
@@ -214,17 +247,19 @@ available on `backup/pre-rebuild` and in history.
   progress per seed, median at least 300 m, average world-x speed at least
   4 m/s) supersedes the older 400/500/8 values in the spec. The contract ticket
   must update the spec before implementation.
-- T-0003 and T-0004 are done. The remaining rebuild is confirmed in
-  `docs/changes/2026-10-20-parallel-ticket-execution.md` and runs in waves:
-  1. T-0005, T-0007
-  2. T-0006, T-0008
-  3. T-0013, T-0015
-  4. T-0014, T-0016
-  5. T-0009
-  6. T-0010, T-0017
-  7. T-0011
-  8. T-0012
+- T-0003, T-0004, T-0005, and T-0007 are done. The remaining rebuild is
+  confirmed in `docs/changes/2026-10-20-parallel-ticket-execution.md` and runs in
+  waves:
+  1. T-0006, T-0008
+  2. T-0013, T-0015
+  3. T-0014, T-0016
+  4. T-0009
+  5. T-0010, T-0017
+  6. T-0011
+  7. T-0012
 - The confirmed wave plan supersedes the old sequential ticket order.
+- Execute waves under the fast wave protocol. Live verification runs at T-0013,
+  T-0009, T-0010, T-0011, and T-0012.
 
 T-0002 is blocked and superseded by the rebuild; do not run it.
 

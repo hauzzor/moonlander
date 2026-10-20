@@ -1,6 +1,6 @@
 ---
 name: parallel-ticket-planning
-description: Use when creating, splitting, or executing Moonlander tickets in parallel. Covers the parallelization check, leaf/trunk splits, scope disjointness, wave planning, coordination handoffs, and serialized verification and delivery. Load before dispatching concurrent implementation teams.
+description: Use when creating, splitting, or executing Moonlander tickets in parallel. Covers the parallelization check, leaf/trunk splits, scope disjointness, wave planning, test contracts, focused review packets, session reuse, milestone live checks, coordination handoffs, and serialized verification and delivery. Load before dispatching concurrent implementation teams.
 ---
 
 # Parallel ticket planning
@@ -58,6 +58,31 @@ depends on physics for `rotate`, so those two are not a safe wave.
 - Each ticket gets its own `test-engineer`.
 - The lead integrates, reviews, verifies, and delivers.
 
+## Fast wave protocol
+
+- Before dispatch, write `docs/tickets/logs/wave-<n>/context.md` from
+  `docs/templates/wave-context.md`: tickets, scopes, exact formulas and
+  signatures, test commands, known traps, review packet, and delivery decision.
+- Every ticket records a `### Test contract` with exact formulas, constants,
+  expected values, thresholds, and test file names. Prefer `it.each` tables and
+  about 20-25 cases per pure module.
+- Reuse the same `sim-engineer`, `test-engineer`, and `reviewer` sessions across
+  waves with `task_id`. Tell them to re-read changed files only and stop on stale
+  assumptions or contract drift.
+- Give the reviewer a packet: diff, new test names, focused test output,
+  acceptance-criteria checklist, and the wave context card.
+- Start a ticket's review as soon as its files are stable, while the other
+  ticket's tests are still running.
+- Leaf pure modules get a focused review. T-0013, T-0009, T-0011, and T-0012 get
+  the full review.
+- After review, verify, and push, start the next wave while `release-engineer`
+  finishes the delivery tail.
+- Run local `npm.cmd run verify` every wave. Run the live Playwright suite at
+  T-0013, T-0009, T-0010, T-0011, and T-0012. Sim-only intermediate waves may use
+  `--no-live` under the recorded waiver.
+- `release-engineer` updates ticket evidence and status and pushes the queue
+  update in the same delivery task.
+
 ## Coordination protocol
 
 - The lead is the only coordinator. Subagents report to the lead; they do not
@@ -89,4 +114,6 @@ verification order.
 - Splitting a ticket into pieces that all need the same integration file.
 - Running two Playwright suites or two deliveries at once.
 - Treating a wave plan as permission to ignore declared scopes.
+- Reusing a subagent session without re-reading changed files.
+- Deferring live verification past T-0012.
 - Adding a separate parallelization agent; the lead owns this process.

@@ -1,5 +1,10 @@
 # Parallel Ticket Execution and Rebuild Wave Decomposition
 
+> Superseded for the live cadence and fast wave protocol by
+> [`2026-10-20-faster-development-cycle.md`](2026-10-20-faster-development-cycle.md).
+> The ticket decomposition, scopes, and dependencies in this brief remain
+> authoritative.
+
 ## Change tier
 
 Development-cycle tooling change plus ticket re-decomposition. No gameplay,
@@ -291,6 +296,10 @@ against the integrated game, not a red partial build.
 - No public API change.
 
 ## Verification plan
+
+> The wave execution and live cadence in this section are superseded by
+> [`2026-10-20-faster-development-cycle.md`](2026-10-20-faster-development-cycle.md);
+> the ticket decomposition remains authoritative.
 
 1. Run `npm.cmd test`, including the planner tests.
 2. Run `npm.cmd run tickets:plan -- --max-parallel 2` on the current queue and

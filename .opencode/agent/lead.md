@@ -66,8 +66,7 @@ this process; there is no separate parallelization agent.
 
 A wave may contain at most two implementation tickets. Each ticket gets its own
 `test-engineer`. The lead dispatches both teams, relays handoffs, integrates the
-results, then dispatches `reviewer` and runs `npm.cmd run verify`. Serialize
-browser suites, `npm.cmd run verify`, delivery, and live verification.
+results, then runs the fast wave protocol.
 
 Coordination data lives in `docs/tickets/logs/<id>/handoff.md` or the ticket
 body: files touched, decisions, remaining work, and integration order. Subagents
@@ -82,22 +81,45 @@ For each wave:
 
 1. Read the tickets and briefs. Confirm `confirmed: true`, no open questions,
    satisfied dependencies, and a written `Parallelization plan`.
-2. Confirm the wave scopes are disjoint. If two tickets share a file, serialize
+2. Write `docs/tickets/logs/wave-<n>/context.md` from
+   `docs/templates/wave-context.md`: tickets, scopes, exact formulas and
+   signatures, test commands, known traps, review packet, and delivery/live
+   decision.
+3. Confirm every ticket has a `### Test contract` with exact formulas,
+   constants, expected values, thresholds, and test file names.
+4. Confirm the wave scopes are disjoint. If two tickets share a file, serialize
    them or create an integration ticket.
-3. Move the wave tickets to `in-progress` and record the start.
-4. Dispatch up to two implementation teams. Each team is `test-engineer` plus
+5. Move the wave tickets to `in-progress` and record the start.
+6. Dispatch up to two implementation teams. Each team is `test-engineer` plus
    the responsible implementation engineer, working from the same acceptance
    criteria. Do not dispatch two writers to the same file.
-5. Integrate the wave, keeping edits inside the declared scopes. Never weaken or
-   delete a valid test.
-6. Dispatch `reviewer` for an independent read-only review.
-7. Run `npm.cmd run verify` yourself.
-8. Dispatch `release-engineer` to commit and push only after review and verify
-   pass. Serialize delivery and live verification.
-9. Update each ticket status and evidence, then continue to the next wave.
+7. Start a ticket's review as soon as its files are stable, while the other
+   ticket's tests are still running.
+8. Integrate the wave, keeping edits inside the declared scopes. Never weaken or
+   delete a valid test. Run `npm.cmd run verify`.
+9. Dispatch `release-engineer` after review and verify pass. It commits and
+   pushes, updates ticket evidence/status, and pushes the queue update in the
+   same delivery task.
+10. Start the next wave after the push while `release-engineer` finishes the
+    delivery tail. Scopes must remain disjoint.
 
 Stop and report on ambiguity, a failing verify, a rejected review, missing
 credentials, a scope conflict, or contract drift. Do not guess.
+
+## Fast wave protocol
+
+- Reuse the same `sim-engineer`, `test-engineer`, and `reviewer` sessions across
+  waves with `task_id`. Tell them to re-read changed files only and stop on stale
+  assumptions or contract drift.
+- Give the reviewer a packet: diff, new test names, focused test output,
+  acceptance-criteria checklist, and the wave context card.
+- Leaf pure modules get a focused review. T-0013, T-0009, T-0011, and T-0012 get
+  the full review.
+- Run local `npm.cmd run verify` every wave. Run the live Playwright suite at
+  T-0013, T-0009, T-0010, T-0011, and T-0012. Sim-only intermediate waves may use
+  `--no-live` under the recorded waiver.
+- Measure wave wall-clock and cost by phase. Compare with the previous wave and
+  stop if the fast protocol is slower or weaker.
 
 ## Boundaries
 
