@@ -7,6 +7,11 @@
 > After every successful production build, commit, push, and verify the live
 > GitHub Pages deployment. See
 > [Delivery after every build](#delivery-after-every-build).
+>
+> User-proposed project changes are ticket-only: do not implement them in the
+> interactive session. Run the intake when needed, confirm the brief, and create
+> tickets for the runner. See
+> [Ticket-only change policy](#ticket-only-change-policy).
 
 ## Product
 
@@ -50,6 +55,19 @@ script execution is disabled.
 - Ticket queue: `npm.cmd run tickets:list`, `npm.cmd run tickets:status`
 - Ticket runner: `npm.cmd run tickets:run`
 
+## Ticket-only change policy
+
+When the user proposes a project change, the interactive lead must not edit,
+implement, test, or deliver it in this session. This includes changes that would
+otherwise be trivial. The lead may inspect read-only, conduct the intake, write
+the brief, and create tickets. After explicit confirmation, create confirmed
+`ready` tickets and leave implementation to the ticket runner. This supersedes
+the direct-edit allowance below for user-proposed project changes.
+
+Explicit opencode configuration, skill, ticket-management, and runner-control
+requests may be handled directly. If the user explicitly requests direct
+implementation of a project change, record the waiver in the brief.
+
 ## Change intake interview
 
 No non-trivial change may be implemented, tested, or delegated for
@@ -69,10 +87,9 @@ A change is non-trivial when it:
 - fixes a bug not already pinned by a failing test with a clear expected
   behavior.
 
-Trivial edits may proceed directly: typos, comments, formatting, documentation
-wording, dependency updates without behavior changes, mechanical refactors,
-and fixes fully specified by an existing failing test. When in doubt, treat the
-change as non-trivial.
+Trivial changes still become tickets under the ticket-only policy. If the user
+explicitly asks for a direct edit, record the waiver; otherwise create a ticket.
+When in doubt, treat the change as non-trivial.
 
 Tier 2 and Tier 3 changes use the full brief, questionnaire, test matrix, and
 contract freeze. Tier 1 edits may skip the templates. The templates are:
@@ -108,7 +125,8 @@ The lead owns this gate and must:
    behavior, not missing exports.
 7. Read the brief back, state the lead's understanding, and ask for an
    unambiguous go-ahead such as "confirmed" or "start development."
-8. Begin the test-driven development cycle only after that confirmation.
+8. Create confirmed `ready` ticket(s) with scopes and dependencies. Do not
+   implement; the ticket runner begins the test-driven cycle.
 
 If scope changes during implementation, stop and re-run the intake interview.
 If the user explicitly waives the interview for a specific change, record the
@@ -163,6 +181,8 @@ The local Markdown queue in `docs/tickets/` is the durable backlog for work that
 can be added continuously, including while ready tickets are being implemented.
 
 - `inbox` tickets can be added at any time. The interactive lead triages them.
+- The interactive lead never implements a proposed change; it runs the intake
+  and creates confirmed tickets. The ticket runner implements them.
 - A ticket may move to `ready` only after the user confirms its written brief
   and the frontmatter has `confirmed: true` with no open questions.
 - The background runner picks only confirmed `ready` tickets whose dependencies
