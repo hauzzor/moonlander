@@ -340,7 +340,7 @@ async function run(command, args, runOptions = {}) {
       error.stderr = stderr;
       reject(error);
     });
-    child.once("exit", (code) => {
+    child.once("close", (code) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
@@ -696,11 +696,11 @@ async function runTicket(ticket) {
     await writeFile(briefPath, ticketText, "utf8");
 
     const recoveryNote = isRecovery
-      ? `\n\nThis is recovery attempt ${attempts}/${options.maxRecoveryAttempts}. The worktree is preserved from a previous attempt that blocked at stage "${current?.data["blocked-stage"] ?? "unknown"}" with reason: ${current?.data["blocked-reason"] ?? "unknown"}. Continue from the existing worktree. Do not restart the TDD cycle from scratch and do not rewrite tests merely to force red. Inspect the existing diff, tests, and logs; fix only what is failing; keep the code-reviewer and all required checks. If the remaining work needs a contract, scope, or ambiguity decision, report BLOCKED with a specific reason.`
+      ? `\n\nThis is recovery attempt ${attempts}/${options.maxRecoveryAttempts}. The worktree is preserved from a previous attempt that blocked at stage "${current?.data["blocked-stage"] ?? "unknown"}" with reason: ${current?.data["blocked-reason"] ?? "unknown"}. Continue from the existing worktree. Do not restart the TDD cycle from scratch and do not rewrite tests merely to force red. Inspect the existing diff, tests, and logs; fix only what is failing; keep the code-reviewer and all required checks. For development-cycle work, implement directly and run the relevant existing checks. If the remaining work needs a contract, scope, or ambiguity decision, report BLOCKED with a specific reason.`
       : "";
     const prompt = `You are the Moonlander ticket runner for ${ticketId}. Work only inside this worktree.
 
-Read the attached confirmed ticket brief. Follow AGENTS.md and the brief. Use strict TDD: have test-engineer write failing tests first and prove red, then have the responsible implementation engineer make them green. Spawn game-architect and code-reviewer as required by AGENTS.md. Run the narrow tests, typecheck, local e2e, and build. Do not edit tests to obtain green. Do not run git commit, git push, or modify .git; the runner owns integration and delivery. Do not edit other tickets.${recoveryNote}
+Read the attached confirmed ticket brief. Follow AGENTS.md and the brief. For game code tickets, use strict TDD: have test-engineer write failing tests first and prove red, then have the responsible implementation engineer make them green. For development-cycle tickets, implement directly and run the relevant existing checks; do not add red/green tests. Spawn game-architect and code-reviewer as required by AGENTS.md. Run the narrow tests, typecheck, local e2e, and build. Do not edit tests to obtain green. Do not run git commit, git push, or modify .git; the runner owns integration and delivery. Do not edit other tickets.${recoveryNote}
 
 At the end, print a TICKET REPORT section. Include exactly one of:
 REVIEW: PASS
