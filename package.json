@@ -27,6 +27,7 @@
     "tickets": "node scripts/tickets.mjs",
     "tickets:new": "node scripts/tickets.mjs new",
     "tickets:list": "node scripts/tickets.mjs list",
+    "tickets:plan": "node scripts/tickets.mjs plan",
     "tickets:status": "node scripts/tickets.mjs status",
     "tickets:show": "node scripts/tickets.mjs show",
     "tickets:confirm": "node scripts/tickets.mjs confirm",

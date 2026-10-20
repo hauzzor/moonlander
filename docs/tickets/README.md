@@ -2,13 +2,16 @@
 
 The ticket queue is a durable local backlog for **game code** work.
 
-> Current mode: one-session sequential execution. The interactive `lead` claims
-> and executes confirmed tickets in order in the current session. The background
-> runner remains available for later use but is not used now. See `AGENTS.md`.
+> Current mode: one-session execution with waves. The interactive `lead` claims
+> and executes confirmed tickets in the current session, up to two
+> implementation tickets per wave. The background runner remains available for
+> later use but is not used now. See `AGENTS.md`.
 
 Development-cycle changes — the ticket/runner/delivery tooling, `AGENTS.md`,
 agent and skill configuration, and workflow documentation — are not game code.
-The interactive lead implements those directly without a ticket, intake, or TDD.
+The lead coordinates them directly without a ticket or intake; `release-engineer`
+implements scripts, CI, and root tooling, and the lead updates docs, `AGENTS.md`,
+and agent/skill configuration.
 
 ## Lifecycle
 
@@ -21,7 +24,8 @@ inbox → needs-info ↔ ready → in-progress → review → done
 - `needs-info` — the lead is waiting on answers or a confirmed brief.
 - `ready` — brief confirmed; dependencies and scopes are declared. Only these
   are claimable.
-- `in-progress` — claimed by the runner; a lock and worktree exist.
+- `in-progress` — claimed by the runner or the lead. Runner mode also creates a
+  lock and worktree; one-session mode shares the main working tree.
 - `review` — implementation and tests are green; review/merge queue pending.
 - `done` — verified, merged, delivered, and live-tested.
 - `blocked` — a recoverable failure that the runner will retry once
@@ -39,6 +43,7 @@ npm.cmd run tickets:status
 npm.cmd run tickets:show -- T-0001
 npm.cmd run tickets:logs -- T-0001 --follow
 npm.cmd run tickets:recover -- T-0001 [--force]
+npm.cmd run tickets:plan [--max-parallel 2]
 npm.cmd run tickets:run
 ```
 
@@ -80,6 +85,37 @@ open-questions: []
 - Large requests should be split into child tickets with `parent` and
   `depends-on` so disjoint scopes can run in parallel.
 
+## Parallelization and waves
+
+- Every ticket and change brief declares a `Parallelization plan`.
+- Split work only when the result is file-disjoint or creates a clean
+  leaf/trunk boundary.
+- A wave may run at most two implementation tickets in one session.
+- Scopes of tickets in the same wave must not overlap.
+- Shared files (`simulation.ts`, `render/index.ts`, package files, configs, and
+  shared test files) have one writer at a time.
+- The lead is the only coordinator. Handoffs go in
+  `docs/tickets/logs/<id>/handoff.md` or the ticket body.
+- `npm.cmd run tickets:plan` prints ready tickets, scope conflicts, suggested
+  waves, and unscheduled tickets with reasons.
+- A ready ticket without a non-empty `## Parallelization plan` is unscheduled by
+  `tickets:plan`; fill the section before dispatch. A heading with only blank
+  template fields does not count.
+- `tickets:plan` uses `TICKET_PLAN_MAX_PARALLEL` (default 2), not the runner's
+  `TICKET_MAX_PARALLEL`.
+- Dependencies scheduled in an earlier wave are treated as satisfied for
+  planning. They must still be `done` before the later ticket is claimed.
+- Ready tickets that overlap an `in-progress` or `review` ticket are reported
+  and unscheduled.
+- Browser suites, `npm.cmd run verify`, delivery, and live verification are
+  serialized.
+- True worktree isolation is only available in the background-runner mode. The
+  one-session mode relies on disjoint scopes and one writer per file.
+
+Use YAML arrays for `scopes` and `depends-on`. The planner also parses
+comma-separated strings defensively, but the runner and queue commands expect
+arrays.
+
 The runner writes these fields when a ticket blocks:
 
 ```yaml
@@ -101,7 +137,8 @@ recovery-exhausted: false
 
 ## Runner behavior
 
-- Default maximum parallel implementation tickets: 3.
+- Background-runner default maximum parallel implementation tickets: 3. The
+  current one-session mode uses a cap of 2; see `AGENTS.md`.
 - One Playwright/browser suite and one merge/delivery at a time.
 - The runner holds a global `docs/tickets/.locks/runner.json` lock and refuses
   to start a second runner unless `--force` is used. Use `--force` only after

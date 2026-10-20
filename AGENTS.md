@@ -65,8 +65,9 @@ script execution is disabled.
 - Delivery: `npm.cmd run deliver -- --message "..."`
 - Live browser suite: `npm.cmd run test:e2e:live`
 - Tickets: `npm.cmd run tickets:new -- "Title"`, `tickets:list`,
-  `tickets:status`, `tickets:show -- T-0001`, `tickets:confirm -- T-0001`,
-  `tickets:move -- T-0001 ready`, `tickets:recover -- T-0001 [--force]`
+  `tickets:status`, `tickets:plan [--max-parallel 2]`, `tickets:show -- T-0001`,
+  `tickets:confirm -- T-0001`, `tickets:move -- T-0001 ready`,
+  `tickets:recover -- T-0001 [--force]`
 
 `npm.cmd run verify` runs typecheck, all unit tests, local Playwright, and the
 production build. CI additionally runs `npm.cmd run sim:demo`.
@@ -136,26 +137,42 @@ Tests do not have to be red-first, but they are not optional.
 - `reviewer` blocks missing coverage, weakened assertions, and tests that only
   mirror the implementation.
 
-## One-session ticket execution
+## One-session ticket execution and waves
 
 The local Markdown queue in `docs/tickets/` is the durable backlog. For the
-current mode there is no background runner; `lead` executes tickets sequentially
-in the current session.
+current mode there is no background runner; `lead` executes confirmed tickets in
+waves in the current session.
 
 - A ticket may move to `ready` only after the user confirms its written brief,
   the frontmatter has `confirmed: true`, and `open-questions` is empty.
 - `inbox` tickets can be added at any time. The lead triages them.
+- Every ticket and change brief must contain a `Parallelization plan`. Before
+  creating or claiming tickets, check whether the work can be split into
+  file-disjoint units. Split only when the split reduces the critical path;
+  never split merely to increase ticket count.
 - Tickets declare narrow `scopes` and accurate `depends-on`. Declared scopes of
   concurrently edited tickets must not overlap.
 - Shared contract files are handled by a serialized contract ticket first.
-- The lead moves the ticket to `in-progress`, dispatches `test-engineer` and the
-  responsible engineer, then dispatches `reviewer`.
-- The lead runs `npm.cmd run verify`. Only after review and verify pass does
-  `release-engineer` commit and push.
-- The lead records evidence and moves the ticket to `done`, then continues to
-  the next ticket.
-- Stop on ambiguity, failing verify, rejected review, missing credentials, or a
-  scope conflict. Do not guess.
+- Shared implementation files (`simulation.ts`, `render/index.ts`, package
+  files, configs, and shared test files) have one writer at a time. If two
+  tickets need the same file, serialize them or introduce an integration
+  ticket.
+- A wave may run at most two implementation tickets concurrently in one session.
+  Each implementation ticket is paired with `test-engineer`; the lead dispatches
+  both and keeps their file scopes disjoint.
+- The lead writes the wave plan, moves tickets to `in-progress`, and dispatches
+  the implementation teams. The lead is the only coordinator; subagents report
+  to the lead and do not coordinate directly.
+- Coordination notes go in `docs/tickets/logs/<id>/handoff.md` or the ticket
+  body: files touched, decisions, remaining work, and integration order.
+- The lead integrates the wave, dispatches `reviewer`, and runs
+  `npm.cmd run verify`. Serialize browser suites, verify, delivery, and live
+  verification. Only after review and verify pass does `release-engineer`
+  commit and push.
+- The lead records evidence and moves each ticket to `done`, then continues to
+  the next wave.
+- Stop on ambiguity, failing verify, rejected review, missing credentials, a
+  scope conflict, or contract drift. Do not guess.
 - Ticket files are the checkpoint if the session ends. The background runner
   remains available for later use but is not used in this mode.
 
@@ -197,20 +214,17 @@ available on `backup/pre-rebuild` and in history.
   progress per seed, median at least 300 m, average world-x speed at least
   4 m/s) supersedes the older 400/500/8 values in the spec. The contract ticket
   must update the spec before implementation.
-- Rebuild tickets run in order:
-
-| Ticket | Scope |
-| --- | --- |
-| T-0003 | Contract alignment: spec, types, constants, exports, target tests |
-| T-0004 | Deterministic field and tunnel: near-vertical, variable width, sampling |
-| T-0005 | Ship physics, canted thrusters, rear booster, drag |
-| T-0006 | Collision, damage, bounce, invulnerability, destruction |
-| T-0007 | Eye, direction, distance-to-start, velocity sensors |
-| T-0008 | Autopilot and the fixed-seed benchmark |
-| T-0009 | Game shell, camera, input, HUD, seed controls, sensor console, renderer |
-| T-0010 | Playwright e2e and documented test hooks |
-| T-0011 | CI, GitHub Pages, live suite, docs reconciliation |
-| T-0012 | Final parity, full verify, live suite, rebuild report |
+- T-0003 and T-0004 are done. The remaining rebuild is confirmed in
+  `docs/changes/2026-10-20-parallel-ticket-execution.md` and runs in waves:
+  1. T-0005, T-0007
+  2. T-0006, T-0008
+  3. T-0013, T-0015
+  4. T-0014, T-0016
+  5. T-0009
+  6. T-0010, T-0017
+  7. T-0011
+  8. T-0012
+- The confirmed wave plan supersedes the old sequential ticket order.
 
 T-0002 is blocked and superseded by the rebuild; do not run it.
 
@@ -244,16 +258,27 @@ workflow documentation, and tests for that tooling.
 - Subagents may spawn one additional level of their own kind for disjoint work,
   with at most two concurrent children. Delegated agents inherit the same
   boundaries.
-- The lead owns final integration and verification.
+- The lead owns parallelization planning and final integration. There is no
+  separate parallelization agent.
 
 ## Parallel execution
 
 - The lead may run subagents concurrently only when their edit scopes are
   disjoint and the shared contract is already frozen.
-- There is no background runner and no worktree fan-out in the current mode.
-- Serialize browser suites, delivery, and live verification.
+- In-session subagents share the main working tree; there is no worktree
+  isolation. Never run two writers on the same file, package, or test config.
+- The in-session cap is two implementation tickets per wave. Each ticket gets
+  its own `test-engineer`; the lead integrates the results.
+- True worktree isolation requires the background runner. Do not exceed the
+  in-session cap by adding more writers; repair and use the runner instead.
+- Serialize browser suites, `npm.cmd run verify`, delivery, and live
+  verification.
 - The lead serializes tickets unless a ticket explicitly allows disjoint
-  concurrent work.
+  concurrent work and its `Parallelization plan` documents the integration
+  order.
+- Use `npm.cmd run tickets:plan` to inspect ready tickets, scope conflicts, and
+  suggested waves before dispatch. Load the `parallel-ticket-planning` skill
+  when decomposing a change.
 
 ## Engineering rules
 
@@ -266,3 +291,13 @@ workflow documentation, and tests for that tooling.
 - Keep the whole project runnable from Node 24 and deployable as static files.
 - Preserve the documented `data-testid` hooks unless a confirmed brief changes
   them.
+
+## Permission behavior
+
+- Run commands that the project permission rules allow without asking the user.
+- Do not ask for approval for routine reads, tests, builds, typecheck, or git
+  inspection.
+- Ask only when the permission rules require approval, an action is irreversible
+  or user-visible, or the change workflow requires a decision.
+- Subagents must not ask the user directly; return questions to the lead.
+- Commit, push, and delivery stay reserved to `release-engineer`.

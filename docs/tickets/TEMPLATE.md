@@ -59,6 +59,19 @@ Boundaries, invalid input, reset, long runs, concurrency, and delivery cases.
 
 Packages, APIs, UI, docs, scripts, and tests.
 
+## Parallelization plan
+
+Every ticket must fill this in. Split only when the result is file-disjoint or
+creates a clean leaf/trunk boundary.
+
+- Independent units:
+- Disjoint scopes:
+- Shared files / integration points:
+- Wave and dependencies:
+- Max concurrency (default 2):
+- Coordination / handoff notes:
+- Why sequential, if no split:
+
 ## Verification plan
 
 Commands, tests, manual checks, review, and delivery.

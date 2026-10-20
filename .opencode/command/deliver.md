@@ -5,8 +5,8 @@ agent: release-engineer
 
 Delivery message: $ARGUMENTS
 
-Deliver only after the user explicitly requests it and `reviewer` plus
-`npm.cmd run verify` have passed.
+Deliver after `reviewer` and `npm.cmd run verify` have passed, as part of the
+confirmed ticket flow. Do not wait for a separate user request.
 
 1. Inspect `git status`, `git diff`, and `git diff --cached`.
 2. Stage only the intended paths. Never commit secrets, build output, logs,

@@ -9,6 +9,7 @@ export default defineConfig({
   fullyParallel: true,
   timeout: 30_000,
   retries: process.env.CI ? 2 : 0,
+  ...(process.env.CI ? {} : { workers: 2 }),
   reporter: [["list"]],
   use: {
     baseURL: liveBaseUrl ?? localBaseUrl,

@@ -9,6 +9,11 @@ import {
   selectRecoverable,
 } from "./lib/recovery.mjs";
 import {
+  formatPlan,
+  planWaves,
+  resolvePlanConcurrency,
+} from "./lib/plan.mjs";
+import {
   ACTIVE_STATUSES,
   STATUSES,
   ensureQueue,
@@ -34,6 +39,7 @@ function usage() {
 Usage:
   npm.cmd run tickets:new -- "Title"
   npm.cmd run tickets:list [--status ready]
+  npm.cmd run tickets:plan [--max-parallel 2]
   npm.cmd run tickets:status [--watch]
   npm.cmd run tickets:show -- T-0001
   npm.cmd run tickets:confirm -- T-0001
@@ -95,6 +101,12 @@ async function commandList(args) {
   const filtered = filter ? tickets.filter((ticket) => ticket.status === filter) : tickets;
   console.log(formatTable(filtered));
   if (filtered.length === 0) console.log("(no tickets)");
+}
+
+async function commandPlan(args) {
+  const maxConcurrent = resolvePlanConcurrency(args, process.env);
+  const tickets = await listTickets(root);
+  console.log(formatPlan(planWaves(tickets, { maxConcurrent }), tickets));
 }
 
 async function readLocks() {
@@ -367,6 +379,9 @@ async function main() {
       break;
     case "list":
       await commandList(args);
+      break;
+    case "plan":
+      await commandPlan(args);
       break;
     case "status":
       await commandStatus(args);

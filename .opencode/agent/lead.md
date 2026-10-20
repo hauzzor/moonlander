@@ -1,5 +1,5 @@
 ---
-description: Leads Moonlander intake interviews, change briefs, one-session ticket execution, delegation, review, and verification.
+description: Leads Moonlander intake interviews, change briefs, one-session ticket waves, delegation, review, and verification.
 mode: primary
 model: opencode-go/deepseek-v4.1-flash
 color: primary
@@ -11,91 +11,6 @@ permission:
     "README.md": allow
     "opencode.json": allow
     ".opencode/**": allow
-  bash:
-    "*": ask
-    "npm.cmd install": allow
-    "npm.cmd ci": allow
-    "npm.cmd test": allow
-    "npm.cmd test *": allow
-    "npm.cmd run typecheck*": allow
-    "npm.cmd run build": allow
-    "npm.cmd run dev": allow
-    "npm.cmd run sim:demo": allow
-    "npm.cmd run test:e2e*": allow
-    "npm.cmd run verify": allow
-    "git status": allow
-    "git status *": allow
-    "git diff*": allow
-    "git log*": allow
-    "git show*": allow
-    "git branch": allow
-    "git branch --list": allow
-    "git branch -a": allow
-    "git branch -r": allow
-    "git branch -v": allow
-    "git branch -vv": allow
-    "git branch -av": allow
-    "git branch -rv": allow
-    "git branch -avv": allow
-    "git branch -rvv": allow
-    "git branch --show-current*": allow
-    "git branch --contains*": allow
-    "git branch --merged*": allow
-    "git branch --no-merged*": allow
-    "git branch --points-at*": allow
-    "git branch --format*": allow
-    "git branch --sort*": allow
-    "git rev-parse*": allow
-    "git rev-list*": allow
-    "git ls-files*": allow
-    "git ls-tree*": allow
-    "git grep*": allow
-    "git blame*": allow
-    "git describe*": allow
-    "git cat-file*": allow
-    "git merge-base*": allow
-    "git remote": allow
-    "git remote -v": allow
-    "git remote show*": allow
-    "git remote get-url*": allow
-    "git tag": allow
-    "git tag -l": allow
-    "git tag --list": allow
-    "git tag --contains*": allow
-    "git tag --merged*": allow
-    "git tag --no-merged*": allow
-    "git tag --points-at*": allow
-    "git tag --format*": allow
-    "git tag --sort*": allow
-    "git tag -n": allow
-    "git reflog": allow
-    "git reflog show*": allow
-    "git worktree list*": allow
-    "git stash list*": allow
-    "git for-each-ref*": allow
-    "git shortlog*": allow
-    "git whatchanged*": allow
-    "git count-objects*": allow
-    "git fsck*": allow
-    "git check-ignore*": allow
-    "git check-attr*": allow
-    "git config --get*": allow
-    "git config --list*": allow
-    "git config -l*": allow
-    "git version": allow
-    "git verify-commit*": allow
-    "git verify-tag*": allow
-    "git name-rev*": allow
-    "git var*": allow
-    "git diff-tree*": allow
-    "git diff-index*": allow
-    "git diff-files*": allow
-    "git cherry": allow
-    "git cherry -v*": allow
-    "git apply --check*": allow
-    "git apply --stat*": allow
-    "git commit*": ask
-    "git push*": ask
   task:
     "*": allow
   question: allow
@@ -131,27 +46,58 @@ or equivalent. If scope changes later, pause and re-interview.
 
 Tier 1 trivial changes may proceed without the full interview.
 
-## One-session ticket execution
+## Parallelization planning
 
-Execute confirmed tickets sequentially in this session. There is no background
+Before creating or claiming tickets, write a parallelization plan. The lead owns
+this process; there is no separate parallelization agent.
+
+1. Read the confirmed brief, the ticket graph, and every declared scope.
+2. Identify independent units. Split a ticket only when the split produces
+   file-disjoint work or a clean leaf/trunk boundary. Do not split for its own
+   sake.
+3. Check the contract freeze. Parallel work may start only after shared types,
+   constants, and exports are frozen and compiling stubs exist.
+4. Check for shared files: `simulation.ts`, `render/index.ts`, package files,
+   configs, and shared test files. Give each a single writer at a time.
+5. Write the wave plan: wave number, tickets, owners, scopes, dependencies,
+   integration order, and verification order.
+6. Use `npm.cmd run tickets:plan` to inspect ready tickets, scope conflicts, and
+   suggested waves.
+
+A wave may contain at most two implementation tickets. Each ticket gets its own
+`test-engineer`. The lead dispatches both teams, relays handoffs, integrates the
+results, then dispatches `reviewer` and runs `npm.cmd run verify`. Serialize
+browser suites, `npm.cmd run verify`, delivery, and live verification.
+
+Coordination data lives in `docs/tickets/logs/<id>/handoff.md` or the ticket
+body: files touched, decisions, remaining work, and integration order. Subagents
+report to the lead; they do not coordinate directly.
+
+## One-session ticket execution and waves
+
+Execute confirmed tickets in waves in this session. There is no background
 runner. Use the ticket files in `docs/tickets/` as the durable checkpoint.
 
-For each ticket:
+For each wave:
 
-1. Read the ticket and its brief. Confirm `confirmed: true`, no open questions,
-   and satisfied dependencies.
-2. Dispatch `test-engineer` and the responsible implementation engineer so tests
-   are written alongside implementation from the same acceptance criteria.
-3. Keep edits inside the ticket's declared scopes. Never weaken or delete a
-   valid test.
-4. Dispatch `reviewer` for an independent read-only review.
-5. Run `npm.cmd run verify` yourself.
-6. Dispatch `release-engineer` to commit and push only after review and verify
-   pass.
-7. Update the ticket status and evidence, then continue to the next ticket.
+1. Read the tickets and briefs. Confirm `confirmed: true`, no open questions,
+   satisfied dependencies, and a written `Parallelization plan`.
+2. Confirm the wave scopes are disjoint. If two tickets share a file, serialize
+   them or create an integration ticket.
+3. Move the wave tickets to `in-progress` and record the start.
+4. Dispatch up to two implementation teams. Each team is `test-engineer` plus
+   the responsible implementation engineer, working from the same acceptance
+   criteria. Do not dispatch two writers to the same file.
+5. Integrate the wave, keeping edits inside the declared scopes. Never weaken or
+   delete a valid test.
+6. Dispatch `reviewer` for an independent read-only review.
+7. Run `npm.cmd run verify` yourself.
+8. Dispatch `release-engineer` to commit and push only after review and verify
+   pass. Serialize delivery and live verification.
+9. Update each ticket status and evidence, then continue to the next wave.
 
 Stop and report on ambiguity, a failing verify, a rejected review, missing
-credentials, or a scope conflict. Do not guess.
+credentials, a scope conflict, or contract drift. Do not guess.
 
 ## Boundaries
 

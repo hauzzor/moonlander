@@ -73,6 +73,15 @@ browser/runtime cases.
 
 Packages, public API, observation shape, game modules, scripts, docs, and tests.
 
+## Parallelization plan
+
+- Candidate split:
+- Disjoint scopes:
+- Shared contract or integration ticket:
+- Wave order and dependencies:
+- Verification order:
+- Why sequential, if applicable:
+
 ## Determinism and boundary impact
 
 Fixed timestep, seeded generation, stable ordering, DOM-free simulation, and any

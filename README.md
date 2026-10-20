@@ -79,13 +79,18 @@ New work can be queued locally while the runner is busy with other tickets.
 npm.cmd run tickets:new -- "Change the thruster sound"
 npm.cmd run tickets:list
 npm.cmd run tickets:status
+npm.cmd run tickets:plan
 npm.cmd run tickets:run
 ```
 
 Tickets live under `docs/tickets/` and move through `inbox`, `needs-info`,
 `ready`, `in-progress`, `review`, `done`, and `blocked`. Only confirmed `ready`
 tickets with satisfied dependencies and non-overlapping scopes are claimed.
-Large requests should be split into child tickets.
+Large requests should be split into child tickets, and every ticket declares a
+`Parallelization plan`. The current one-session mode executes up to two
+implementation tickets per wave. `npm.cmd run tickets:plan` prints scope
+conflicts and suggested waves; shared files, verification, delivery, and live
+checks are serialized.
 
 The runner runs in a dedicated terminal and streams claims, agent sessions,
 test results, the merge queue, and delivery status. Use
@@ -93,8 +98,10 @@ test results, the merge queue, and delivery status. Use
 `npm.cmd run tickets:logs -- T-0001 --follow` for per-ticket logs. See
 [`docs/tickets/README.md`](docs/tickets/README.md).
 
-Implementation can run in parallel in isolated worktrees; merging, deployment,
-and live verification are serialized per ticket.
+Implementation can run in parallel in isolated worktrees in background-runner
+mode; merging, deployment, and live verification are serialized per ticket. In
+the current one-session mode, subagents share the working tree, so use the
+two-ticket wave cap and disjoint scopes.
 
 ## Local development
 
