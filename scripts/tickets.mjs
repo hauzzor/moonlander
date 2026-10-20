@@ -3,6 +3,12 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  isLockStale,
+  recoverySummary,
+  resolveRecoveryPolicy,
+  selectRecoverable,
+} from "./lib/recovery.mjs";
+import {
   ACTIVE_STATUSES,
   STATUSES,
   ensureQueue,
@@ -32,16 +38,19 @@ Usage:
   npm.cmd run tickets:show -- T-0001
   npm.cmd run tickets:confirm -- T-0001
   npm.cmd run tickets:move -- T-0001 ready
+  npm.cmd run tickets:recover -- T-0001 [--force]
   npm.cmd run tickets:logs -- T-0001 [--follow]
   npm.cmd run tickets:pause
   npm.cmd run tickets:resume
 
 Lifecycle:
   inbox -> needs-info <-> ready -> in-progress -> review -> done
-                                               \-> blocked
+                                               \-> blocked -> ready (auto recovery)
 
 Only confirmed ready tickets with satisfied dependencies and disjoint scopes
-are claimable by the runner. See docs/tickets/README.md.`;
+are claimable by the runner. Recoverable blocked tickets are automatically
+requeued once by the runner. Ambiguous tickets move to needs-info. See
+docs/tickets/README.md.`;
 }
 
 function valueAfter(args, index, flag) {
@@ -97,7 +106,7 @@ async function readLocks() {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
     try {
       const parsed = JSON.parse(await readFile(path.join(directory, entry.name), "utf8"));
-      locks.push(parsed);
+      locks.push({ ...parsed, file: entry.name });
     } catch {
       locks.push({ file: entry.name, invalid: true });
     }
@@ -109,6 +118,7 @@ async function commandStatus(args) {
   const watch = args.includes("--watch");
   const print = async () => {
     const tickets = await listTickets(root);
+    const recoveryPolicy = resolveRecoveryPolicy(process.env);
     const counts = Object.fromEntries(
       STATUSES.map((status) => [
         status,
@@ -121,7 +131,16 @@ async function commandStatus(args) {
       Number(process.env.TICKET_MAX_PARALLEL ?? 3),
       active,
     );
+    const recoverable = selectRecoverable(
+      tickets,
+      active,
+      Date.now(),
+      recoveryPolicy,
+      Number(process.env.TICKET_MAX_PARALLEL ?? 3),
+    );
+    const blocked = tickets.filter((ticket) => ticket.status === "blocked");
     const locks = await readLocks();
+    const runnerLock = locks.find((lock) => lock.file === "runner.json");
     const worktrees = existsSync(path.join(repoRoot, ".worktrees"))
       ? (await readdir(path.join(repoRoot, ".worktrees"), { withFileTypes: true }))
           .filter((entry) => entry.isDirectory())
@@ -133,10 +152,36 @@ async function commandStatus(args) {
     console.log(`Ticket queue: ${root}`);
     console.log(`Paused: ${paused ? "YES" : "no"}`);
     console.log(
+      `Runner: ${
+        runnerLock
+          ? `pid=${runnerLock.pid ?? "?"} heartbeat=${runnerLock.heartbeat ?? "?"} ${
+              isLockStale(runnerLock, Date.now(), recoveryPolicy.staleLockMs)
+                ? "stale"
+                : "active"
+            }`
+          : "(none)"
+      }`,
+    );
+    console.log(
       `Statuses: ${STATUSES.map((status) => `${status}=${counts[status]}`).join("  ")}`,
     );
     console.log(`Active: ${active.map((ticket) => ticket.id).join(", ") || "(none)"}`);
     console.log(`Claimable now: ${claimable.map((ticket) => ticket.id).join(", ") || "(none)"}`);
+    console.log(
+      `Recoverable now: ${recoverable.map((ticket) => ticket.id).join(", ") || "(none)"}`,
+    );
+    console.log(
+      `Blocked recovery: ${
+        blocked.length > 0
+          ? blocked
+              .map(
+                (ticket) =>
+                  `${ticket.id} ${recoverySummary(ticket, Date.now(), recoveryPolicy)}`,
+              )
+              .join("; ")
+          : "(none)"
+      }`,
+    );
     console.log(`Locks: ${locks.length}`);
     for (const lock of locks) {
       console.log(
@@ -208,6 +253,58 @@ async function commandMove(args) {
   }
   await moveTicket(root, ticket, status);
   console.log(`${id} -> ${status}`);
+}
+
+async function commandRecover(args) {
+  const id = args[0];
+  if (!id) throw new Error("Usage: npm.cmd run tickets:recover -- T-0001 [--force]");
+  const force = args.includes("--force");
+  const ticket = await findTicket(root, id);
+  if (!ticket) throw new Error(`Ticket not found: ${id}`);
+  if (ticket.status !== "blocked") {
+    throw new Error(`${id} is ${ticket.status}; only blocked tickets can be recovered.`);
+  }
+  if (ticket.data.confirmed !== true) {
+    throw new Error(`${id} is not confirmed.`);
+  }
+  const questions = ticket.data["open-questions"];
+  if (
+    (Array.isArray(questions) && questions.length > 0) ||
+    (typeof questions === "string" &&
+      questions.trim() &&
+      questions.trim().toLowerCase() !== "none")
+  ) {
+    throw new Error(`${id} still has open questions.`);
+  }
+  if (!Array.isArray(ticket.data.scopes) || ticket.data.scopes.length === 0) {
+    throw new Error(`${id} has no scopes.`);
+  }
+
+  const recoveryPolicy = resolveRecoveryPolicy(process.env);
+  const attempts = Number(ticket.data["recovery-attempts"] ?? 0) || 0;
+  if (ticket.data["recovery-exhausted"] === true && !force) {
+    throw new Error(
+      `${id} is recovery-exhausted; inspect the logs, then use --force to grant one more recovery.`,
+    );
+  }
+  if (attempts >= recoveryPolicy.maxAttempts && !force) {
+    throw new Error(
+      `${id} has used all ${recoveryPolicy.maxAttempts} recovery attempt(s); use --force to grant one more.`,
+    );
+  }
+
+  const nextAttempts = force
+    ? Math.max(1, recoveryPolicy.maxAttempts)
+    : Math.max(1, attempts);
+  await updateTicket(ticket, {
+    "recovery-attempts": nextAttempts,
+    "recovery-exhausted": false,
+    "recovery-last-at": new Date().toISOString(),
+  });
+  await moveTicket(root, ticket, "ready");
+  console.log(
+    `requeued ${id}; the runner will use recovery mode with attempt ${nextAttempts}/${recoveryPolicy.maxAttempts}`,
+  );
 }
 
 async function commandLogs(args) {
@@ -282,6 +379,9 @@ async function main() {
       break;
     case "move":
       await commandMove(args);
+      break;
+    case "recover":
+      await commandRecover(args);
       break;
     case "logs":
       await commandLogs(args);

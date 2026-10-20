@@ -53,6 +53,7 @@ script execution is disabled.
 - Delivery: `npm.cmd run deliver -- --message "..."`
 - New ticket: `npm.cmd run tickets:new -- "Title"`
 - Ticket queue: `npm.cmd run tickets:list`, `npm.cmd run tickets:status`
+- Manual recovery: `npm.cmd run tickets:recover -- T-0002 [--force]`
 - Ticket runner: `npm.cmd run tickets:run`
 
 ## Ticket-only change policy
@@ -187,6 +188,12 @@ can be added continuously, including while ready tickets are being implemented.
   and the frontmatter has `confirmed: true` with no open questions.
 - The background runner picks only confirmed `ready` tickets whose dependencies
   are `done` and whose declared file scopes do not overlap active tickets.
+- Recoverable blocked tickets are requeued once automatically with their
+  preserved worktree and a longer agent timeout. Ambiguous tickets move to
+  `needs-info`; exhausted tickets stay `blocked` with
+  `recovery-exhausted: true`. Disable the behavior with `--no-recover`.
+- The runner holds a global lock, heartbeats active tickets, and recovers
+  tickets left `in-progress` by a stale runner lock.
 - Large requests are decomposed into child tickets with narrow scopes and
   explicit dependencies. Shared contract files are handled by a serialized
   contract ticket first.
