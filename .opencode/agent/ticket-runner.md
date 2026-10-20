@@ -27,6 +27,8 @@ required contract is missing, stop and report `BLOCKED: <reason>`.
 
 Mandatory workflow:
 
+For **game code** tickets:
+
 1. Freeze any new public types/constants/exports in the worktree and run
    typecheck.
 2. Have `test-engineer` write failing tests first and prove the intended red.
@@ -37,6 +39,17 @@ Mandatory workflow:
 5. Run `npm.cmd run typecheck`, `npm.cmd test`, `npm.cmd run test:e2e`, and
    `npm.cmd run build` in the worktree.
 6. Update the ticket's brief/tests/docs only as required by the confirmed scope.
+
+For **development-cycle** tickets (ticket/runner/delivery tooling, AGENTS.md,
+agent/skill configuration, workflow docs, or tests for that tooling):
+
+1. Implement the change directly; do not run the TDD red/green cycle.
+2. Have `code-reviewer` review behavior and architecture.
+3. Run the relevant existing checks, including
+   `npm.cmd run typecheck`, `npm.cmd test`, `npm.cmd run test:e2e`, and
+   `npm.cmd run build` when the change affects them.
+4. Keep game code untouched. If the ticket needs a game code change, report
+   `BLOCKED` and let the lead run the game code intake.
 
 Hard rules:
 

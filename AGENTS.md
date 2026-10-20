@@ -1,17 +1,21 @@
 # Moonlander Agent Guide
 
-> Non-trivial changes require a change intake interview and explicit user
-> confirmation of the written brief before any implementation or test work.
-> See [Change intake interview](#change-intake-interview).
+> Non-trivial **game code** changes require a change intake interview and
+> explicit user confirmation of the written brief before any implementation or
+> test work. See [Change intake interview](#change-intake-interview).
 >
 > After every successful production build, commit, push, and verify the live
 > GitHub Pages deployment. See
 > [Delivery after every build](#delivery-after-every-build).
 >
-> User-proposed project changes are ticket-only: do not implement them in the
-> interactive session. Run the intake when needed, confirm the brief, and create
-> tickets for the runner. See
-> [Ticket-only change policy](#ticket-only-change-policy).
+> Game code changes are ticket-only: do not implement them in the interactive
+> session. Run the intake when needed, confirm the brief, and create tickets for
+> the runner. See [Ticket-only change policy](#ticket-only-change-policy).
+>
+> Development-cycle changes (the ticket queue/runner, delivery and CI tooling,
+> AGENTS.md, agent/skill configuration, and workflow documentation) are handled
+> directly by the lead without intake, tickets, or TDD. See
+> [Development-cycle changes](#development-cycle-changes).
 
 ## Product
 
@@ -58,39 +62,58 @@ script execution is disabled.
 
 ## Ticket-only change policy
 
-When the user proposes a project change, the interactive lead must not edit,
-implement, test, or deliver it in this session. This includes changes that would
-otherwise be trivial. The lead may inspect read-only, conduct the intake, write
-the brief, and create tickets. After explicit confirmation, create confirmed
-`ready` tickets and leave implementation to the ticket runner. This supersedes
-the direct-edit allowance below for user-proposed project changes.
+When the user proposes a **game code** change (gameplay, physics, controls,
+balance, HUD, rendering, terrain, the public `@moonlander/sim` API, game tests,
+or the simulation/game boundary), the interactive lead must not edit, implement,
+test, or deliver it in this session. This includes changes that would otherwise
+be trivial. The lead may inspect read-only, conduct the intake, write the brief,
+and create tickets. After explicit confirmation, create confirmed `ready`
+tickets and leave implementation to the ticket runner.
+
+Development-cycle changes are direct; see
+[Development-cycle changes](#development-cycle-changes).
 
 Explicit opencode configuration, skill, ticket-management, and runner-control
 requests may be handled directly. If the user explicitly requests direct
-implementation of a project change, record the waiver in the brief.
+implementation of a game code change, record the waiver in the brief.
+
+## Development-cycle changes
+
+Changes to the development cycle are not game code changes. They include the
+ticket queue and runner scripts, delivery and CI automation, `AGENTS.md`, agent
+and skill configuration, workflow documentation, and tests that cover this
+tooling.
+
+- Implement them directly in the interactive session.
+- Do not create a ticket or run the intake interview.
+- Skip the TDD cycle. Make the change, then run the relevant existing checks
+  (unit tests, typecheck, build, or delivery verification) before delivering.
+- Keep game code untouched. If part of the request requires a game code change,
+  stop and follow the game code intake/ticket process for that part.
+- Delivery rules still apply to every successful production build.
 
 ## Change intake interview
 
-No non-trivial change may be implemented, tested, or delegated for
+No non-trivial **game code** change may be implemented, tested, or delegated for
 implementation until the intake interview is complete and the user has
 explicitly confirmed the written brief.
 
-A change is non-trivial when it:
+A game code change is non-trivial when it:
 
 - adds or changes gameplay, physics, controls, balance, HUD, rendering,
   terrain, or landing rules;
 - changes the public `@moonlander/sim` API, observation shape, or the
   simulation/game boundary;
-- spans multiple packages or requires coordinated test, implementation, and
-  review work;
+- spans multiple game packages or requires coordinated game test,
+  implementation, and review work;
 - has more than one reasonable interpretation or ambiguous acceptance
   criteria;
-- fixes a bug not already pinned by a failing test with a clear expected
+- fixes a game bug not already pinned by a failing test with a clear expected
   behavior.
 
-Trivial changes still become tickets under the ticket-only policy. If the user
-explicitly asks for a direct edit, record the waiver; otherwise create a ticket.
-When in doubt, treat the change as non-trivial.
+Trivial game code changes still become tickets under the ticket-only policy. If
+the user explicitly asks for a direct edit, record the waiver; otherwise create a
+ticket. When in doubt about game code, treat the change as non-trivial.
 
 Tier 2 and Tier 3 changes use the full brief, questionnaire, test matrix, and
 contract freeze. Tier 1 edits may skip the templates. The templates are:
@@ -136,10 +159,14 @@ executable specification.
 
 ## Test-driven development
 
-Complete the change intake interview and, for Tier 2/3 changes, the contract
-freeze before starting this cycle.
+TDD applies to game code changes. Development-cycle changes are implemented
+directly with the relevant existing checks; see
+[Development-cycle changes](#development-cycle-changes).
 
-Every feature follows this order:
+For game code changes, complete the change intake interview and, for Tier 2/3
+changes, the contract freeze before starting this cycle.
+
+Every game code feature follows this order:
 
 1. The test engineer defines failing tests and proves they fail for the
    intended reason.
@@ -152,9 +179,9 @@ Every feature follows this order:
 5. The lead runs all checks, commits the green implementation, pushes, and
    verifies the GitHub Pages deployment.
 
-Tests are the specification. Do not weaken or delete a test to obtain a green
-run. If a test is wrong, the test engineer must explain the defect and update
-it as a separate red/green cycle.
+Tests are the specification for game code. Do not weaken or delete a test to
+obtain a green run. If a test is wrong, the test engineer must explain the
+defect and update it as a separate red/green cycle.
 
 ## Delivery after every build
 
@@ -178,12 +205,15 @@ to every build from now on.
 
 ## Continuous ticket queue
 
-The local Markdown queue in `docs/tickets/` is the durable backlog for work that
-can be added continuously, including while ready tickets are being implemented.
+The local Markdown queue in `docs/tickets/` is the durable backlog for **game
+code** work that can be added continuously, including while ready tickets are
+being implemented.
 
 - `inbox` tickets can be added at any time. The interactive lead triages them.
-- The interactive lead never implements a proposed change; it runs the intake
-  and creates confirmed tickets. The ticket runner implements them.
+- Development-cycle changes do not go through the queue; the interactive lead
+  implements them directly without intake or TDD.
+- The interactive lead never implements a proposed game code change; it runs the
+  intake and creates confirmed tickets. The ticket runner implements them.
 - A ticket may move to `ready` only after the user confirms its written brief
   and the frontmatter has `confirmed: true` with no open questions.
 - The background runner picks only confirmed `ready` tickets whose dependencies

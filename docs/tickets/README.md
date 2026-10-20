@@ -1,7 +1,11 @@
 # Local Ticket Queue
 
-The ticket queue is a durable local backlog for work that should be picked up
-by the background ticket runner or the interactive lead.
+The ticket queue is a durable local backlog for **game code** work that should
+be picked up by the background ticket runner or the interactive lead.
+
+Development-cycle changes — the ticket/runner/delivery tooling, `AGENTS.md`,
+agent and skill configuration, and workflow documentation — are not game code.
+The interactive lead implements those directly without a ticket, intake, or TDD.
 
 ## Lifecycle
 
