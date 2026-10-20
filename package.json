@@ -32,6 +32,7 @@
     "tickets:confirm": "node scripts/tickets.mjs confirm",
     "tickets:move": "node scripts/tickets.mjs move",
     "tickets:logs": "node scripts/tickets.mjs logs",
+    "tickets:recover": "node scripts/tickets.mjs recover",
     "tickets:next": "node scripts/tickets.mjs next",
     "tickets:run": "node scripts/ticket-runner.mjs",
     "tickets:pause": "node scripts/tickets.mjs pause",

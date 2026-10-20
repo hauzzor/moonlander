@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "lead",
+  "instructions": ["AGENTS.md"],
+  "permission": {
+    "external_directory": "deny",
+    "bash": {
+      "*": "ask",
+      "npm.cmd install": "allow",
+      "npm.cmd ci": "allow",
+      "npm.cmd test": "allow",
+      "npm.cmd test *": "allow",
+      "npm.cmd run typecheck*": "allow",
+      "npm.cmd run build": "allow",
+      "npm.cmd run dev": "allow",
+      "npm.cmd run sim:demo": "allow",
+      "npm.cmd run test:e2e*": "allow",
+      "npm.cmd run verify": "allow",
+      "git status": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow"
+    }
+  }
+}

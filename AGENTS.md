@@ -1,20 +1,22 @@
 # Moonlander Agent Guide
 
-> Non-trivial **game code** changes require a change intake interview and
+> Non-trivial **game code** changes require an in-depth intake interview and
 > explicit user confirmation of the written brief before any implementation or
 > test work. See [Change intake interview](#change-intake-interview).
 >
-> After every successful production build, commit, push, and verify the live
-> GitHub Pages deployment. See
-> [Delivery after every build](#delivery-after-every-build).
+> Tests are written alongside implementation. Review and `npm.cmd run verify`
+> must pass before any push. See
+> [Tests alongside implementation](#tests-alongside-implementation).
 >
-> Game code changes are ticket-only: do not implement them in the interactive
-> session. Run the intake when needed, confirm the brief, and create tickets for
-> the runner. See [Ticket-only change policy](#ticket-only-change-policy).
+> Game code changes are ticket-based and executed sequentially in one session.
+> There is no background runner. See
+> [One-session ticket execution](#one-session-ticket-execution).
 >
-> Development-cycle changes (the ticket queue/runner, delivery and CI tooling,
-> AGENTS.md, agent/skill configuration, and workflow documentation) are handled
-> directly by the lead without intake, tickets, or TDD. See
+> Only `release-engineer` commits and pushes. Delivery is a direct push to
+> `origin/main` after review and verification, followed by GitHub Pages and the
+> live Playwright suite. See [Delivery](#delivery).
+>
+> Development-cycle changes are not game code and are handled directly. See
 > [Development-cycle changes](#development-cycle-changes).
 
 ## Product
@@ -37,7 +39,12 @@ Live game: https://hauzzor.github.io/moonlander/
   no `Math.random`, and no dependencies on the game package.
 - `packages/game` — Vite + Canvas 2D presentation, input, HUD, and game loop.
 - `e2e` — Playwright browser tests.
-- `.github/workflows` — CI, GitHub Pages deployment, and live smoke test.
+- `.github/workflows` — CI and GitHub Pages deployment.
+- `scripts` — delivery, live-suite, and ticket tooling.
+- `docs/spec.md` — the source of truth for behavior and the public API.
+- `docs/autonomy.md` — headless simulation and controller usage.
+- `docs/changes/` — change briefs and historical design decisions.
+- `docs/tickets/` — the durable ticket queue.
 
 The simulation boundary is enforced by TypeScript: `packages/sim/tsconfig.json`
 must not include the DOM library.
@@ -47,240 +54,206 @@ must not include the DOM library.
 On Windows in this environment, use the `.cmd` executables because PowerShell
 script execution is disabled.
 
-- Install: `npm.cmd install`
+- Install: `npm.cmd ci`
 - Dev server: `npm.cmd run dev`
 - Unit tests: `npm.cmd test`
 - Typecheck: `npm.cmd run typecheck`
 - Build: `npm.cmd run build`
 - Browser tests: `npm.cmd run test:e2e`
-- Live browser smoke test: `npm.cmd run test:e2e:live`
+- Full verification: `npm.cmd run verify`
+- Headless demo: `npm.cmd run sim:demo`
 - Delivery: `npm.cmd run deliver -- --message "..."`
-- New ticket: `npm.cmd run tickets:new -- "Title"`
-- Ticket queue: `npm.cmd run tickets:list`, `npm.cmd run tickets:status`
-- Manual recovery: `npm.cmd run tickets:recover -- T-0002 [--force]`
-- Ticket runner: `npm.cmd run tickets:run`
+- Live browser suite: `npm.cmd run test:e2e:live`
+- Tickets: `npm.cmd run tickets:new -- "Title"`, `tickets:list`,
+  `tickets:status`, `tickets:show -- T-0001`, `tickets:confirm -- T-0001`,
+  `tickets:move -- T-0001 ready`, `tickets:recover -- T-0001 [--force]`
 
-## Ticket-only change policy
+`npm.cmd run verify` runs typecheck, all unit tests, local Playwright, and the
+production build. CI additionally runs `npm.cmd run sim:demo`.
 
-When the user proposes a **game code** change (gameplay, physics, controls,
-balance, HUD, rendering, terrain, the public `@moonlander/sim` API, game tests,
-or the simulation/game boundary), the interactive lead must not edit, implement,
-test, or deliver it in this session. This includes changes that would otherwise
-be trivial. The lead may inspect read-only, conduct the intake, write the brief,
-and create tickets. After explicit confirmation, create confirmed `ready`
-tickets and leave implementation to the ticket runner.
+## Change policy
 
-Development-cycle changes are direct; see
-[Development-cycle changes](#development-cycle-changes).
+Game code includes gameplay, physics, controls, balance, HUD, rendering,
+terrain, the public `@moonlander/sim` API, game tests, and the simulation/game
+boundary.
 
-Explicit opencode configuration, skill, ticket-management, and runner-control
-requests may be handled directly. If the user explicitly requests direct
-implementation of a game code change, record the waiver in the brief.
+- Tier 1: typo, docs, formatting, or a fix fully pinned by an existing failing
+  test. The lead may delegate a small ticket without the full interview.
+- Tier 2: single-package feature or behavior change. Requires the interview,
+  written brief, and test matrix.
+- Tier 3: cross-package, public API, physics, gameplay, terrain, or architecture
+  change. Requires the interview, written brief, contract freeze, and test
+  matrix.
 
-## Development-cycle changes
-
-Changes to the development cycle are not game code changes. They include the
-ticket queue and runner scripts, delivery and CI automation, `AGENTS.md`, agent
-and skill configuration, workflow documentation, and tests that cover this
-tooling.
-
-- Implement them directly in the interactive session.
-- Do not create a ticket or run the intake interview.
-- Skip the TDD cycle. Make the change, then run the relevant existing checks
-  (unit tests, typecheck, build, or delivery verification) before delivering.
-- Keep game code untouched. If part of the request requires a game code change,
-  stop and follow the game code intake/ticket process for that part.
-- Delivery rules still apply to every successful production build.
+No non-trivial game change may be implemented, tested, or delegated to an
+implementation agent until the interview is complete, the brief is written, and
+the user has explicitly confirmed it.
 
 ## Change intake interview
 
-No non-trivial **game code** change may be implemented, tested, or delegated for
-implementation until the intake interview is complete and the user has
-explicitly confirmed the written brief.
-
-A game code change is non-trivial when it:
-
-- adds or changes gameplay, physics, controls, balance, HUD, rendering,
-  terrain, or landing rules;
-- changes the public `@moonlander/sim` API, observation shape, or the
-  simulation/game boundary;
-- spans multiple game packages or requires coordinated game test,
-  implementation, and review work;
-- has more than one reasonable interpretation or ambiguous acceptance
-  criteria;
-- fixes a game bug not already pinned by a failing test with a clear expected
-  behavior.
-
-Trivial game code changes still become tickets under the ticket-only policy. If
-the user explicitly asks for a direct edit, record the waiver; otherwise create a
-ticket. When in doubt about game code, treat the change as non-trivial.
-
-Tier 2 and Tier 3 changes use the full brief, questionnaire, test matrix, and
-contract freeze. Tier 1 edits may skip the templates. The templates are:
-
-- `docs/changes/TEMPLATE.md` — change brief.
-- `docs/templates/intake-questionnaire.md` — decision tree and contradictions.
-- `docs/templates/test-matrix.md` — required test coverage.
-- `docs/templates/contract-freeze.md` — pre-test interface freeze.
-
-The lead owns this gate and must:
+The lead owns the gate and must:
 
 1. Stop. Do not edit code, write tests, or spawn implementation agents.
 2. Restate the request and identify affected packages, interfaces, current
    behavior, and constraints.
-3. Consult the relevant read-only specialists, at minimum `game-architect` for
-   scope and interface impact and `test-engineer` for acceptance criteria, plus
-   the responsible engineer for feasibility. Specialists may draft questions,
-   risks, options, and criteria but must not implement or write tests.
-   Subagents cannot talk to the user directly; the lead relays questions and
-   answers.
+3. Consult `reviewer`, `test-engineer`, and the responsible engineer read-only
+   for risks, options, and acceptance criteria. They must not implement or write
+   tests. Subagents cannot talk to the user directly; the lead relays questions
+   and answers.
 4. Interview the user using `docs/templates/intake-questionnaire.md`. Ask every
-   independent question in one round and use at most two rounds total. Offer
-   concrete interpretations and tradeoffs rather than assumptions. Record the
-   answers in the brief decision log.
-5. Write the brief from `docs/changes/TEMPLATE.md` at
-   `docs/changes/YYYY-MM-DD-<slug>.md`. Include the test matrix from
-   `docs/templates/test-matrix.md`. Open questions must be empty before
-   confirmation. This brief is the only file change permitted before
-   confirmation.
-6. Complete `docs/templates/contract-freeze.md` for Tier 2/3 changes: freeze the
-   public types, constants, and exports in `docs/spec.md`, create compiling
-   stubs with no behavior, and run typecheck. Red tests must fail for missing
-   behavior, not missing exports.
-7. Read the brief back, state the lead's understanding, and ask for an
+   independent question in one round, with concrete options and tradeoffs. Use
+   at most two rounds total.
+5. Record every answer in the brief Decision Log. No open questions may remain
+   before confirmation.
+6. Write the brief from `docs/changes/TEMPLATE.md` at
+   `docs/changes/YYYY-MM-DD-<slug>.md`, including the test matrix from
+   `docs/templates/test-matrix.md`.
+7. For Tier 2/3, complete `docs/templates/contract-freeze.md`: freeze public
+   types, constants, and exports in `docs/spec.md`, create compiling stubs with
+   no behavior, and run typecheck.
+8. Read the brief back, state the lead's understanding, and ask for an
    unambiguous go-ahead such as "confirmed" or "start development."
-8. Create confirmed `ready` ticket(s) with scopes and dependencies. Do not
-   implement; the ticket runner begins the test-driven cycle.
+9. After confirmation, create confirmed `ready` tickets with narrow scopes and
+   dependencies. Do not implement.
 
-If scope changes during implementation, stop and re-run the intake interview.
-If the user explicitly waives the interview for a specific change, record the
-waiver in the brief. The brief complements the tests; tests remain the
-executable specification.
+If scope changes during implementation, stop and re-run the interview. Record
+any explicit waiver in the brief. Tests remain the executable specification.
 
-## Test-driven development
+## Tests alongside implementation
 
-TDD applies to game code changes. Development-cycle changes are implemented
-directly with the relevant existing checks; see
-[Development-cycle changes](#development-cycle-changes).
+Tests do not have to be red-first, but they are not optional.
 
-For game code changes, complete the change intake interview and, for Tier 2/3
-changes, the contract freeze before starting this cycle.
+- `test-engineer` derives coverage from `docs/spec.md`, the acceptance criteria,
+  and the edge cases. It writes tests while the implementation engineer writes
+  code.
+- `test-engineer` owns `packages/*/test`, `e2e`, and the test configuration.
+  Implementation agents must not edit tests.
+- Tests must cover determinism, physics thresholds, collision and damage,
+  sensors, observation shape, the autopilot benchmark, pure game helpers, and
+  the documented Playwright hooks.
+- Never weaken, skip, or delete a valid test to obtain green. If a test is
+  wrong, explain the defect and change the requirement explicitly.
+- `reviewer` blocks missing coverage, weakened assertions, and tests that only
+  mirror the implementation.
 
-Every game code feature follows this order:
+## One-session ticket execution
 
-1. The test engineer defines failing tests and proves they fail for the
-   intended reason.
-2. The failing test is committed locally. In a ticket worktree, the per-ticket
-   lead records the red proof in the ticket log; the runner commits the
-   completed ticket branch after green.
-3. The responsible implementation engineer writes the minimum production code
-   to make the tests pass.
-4. The code reviewer checks the behavior, architecture, and TDD evidence.
-5. The lead runs all checks, commits the green implementation, pushes, and
-   verifies the GitHub Pages deployment.
+The local Markdown queue in `docs/tickets/` is the durable backlog. For the
+current mode there is no background runner; `lead` executes tickets sequentially
+in the current session.
 
-Tests are the specification for game code. Do not weaken or delete a test to
-obtain a green run. If a test is wrong, the test engineer must explain the
-defect and update it as a separate red/green cycle.
+- A ticket may move to `ready` only after the user confirms its written brief,
+  the frontmatter has `confirmed: true`, and `open-questions` is empty.
+- `inbox` tickets can be added at any time. The lead triages them.
+- Tickets declare narrow `scopes` and accurate `depends-on`. Declared scopes of
+  concurrently edited tickets must not overlap.
+- Shared contract files are handled by a serialized contract ticket first.
+- The lead moves the ticket to `in-progress`, dispatches `test-engineer` and the
+  responsible engineer, then dispatches `reviewer`.
+- The lead runs `npm.cmd run verify`. Only after review and verify pass does
+  `release-engineer` commit and push.
+- The lead records evidence and moves the ticket to `done`, then continues to
+  the next ticket.
+- Stop on ambiguity, failing verify, rejected review, missing credentials, or a
+  scope conflict. Do not guess.
+- Ticket files are the checkpoint if the session ends. The background runner
+  remains available for later use but is not used in this mode.
 
-## Delivery after every build
+## Delivery
 
-After every successful production build, the lead must run:
+After every successful production build, `release-engineer` runs:
 
 ```powershell
 npm.cmd run deliver -- --message "feat: ..."
 ```
 
-The script verifies the build, commits the intended changes, pushes to
-`origin/main`, waits for the live asset, runs the live Playwright suite, and
-reports the result. Use `--dry-run` first, `--stage-all` only when every
-working-tree change is intended, and `--help` for the full flag list. The manual
-fallback remains: inspect `git status`/`git diff`, stage only intended changes,
-commit, push, wait for the GitHub Pages deployment, and run
-`npm.cmd run test:e2e:live`.
+The script verifies the build, commits intended staged changes, pushes to
+`origin/main`, waits for the live asset, and runs the live Playwright suite.
 
-Do not commit or push a failing build. If the user explicitly waives delivery
-for a specific build, record the waiver in the change brief. This rule applies
-to every build from now on.
+- `release-engineer` is the only agent allowed to commit or push.
+- Inspect `git status`, `git diff`, and `git diff --cached` first.
+- Stage explicit paths. Never commit secrets, build output, logs, worktrees, or
+  unrelated changes.
+- Never force-push, amend, reset `--hard`, or clean.
+- Do not commit or push a failing build.
+- Direct pushes to `main` trigger GitHub Actions and GitHub Pages.
+- Early rebuild tickets may use `--no-live` only with explicit lead approval;
+  the full live suite must pass before the final ticket.
+- The safety branch `backup/pre-rebuild` preserves the pre-rebuild game. Do not
+  delete it.
 
-## Continuous ticket queue
+If delivery fails, stop and report the exact command, output, commit hash,
+whether the push happened, the live URL, and the safest next action.
 
-The local Markdown queue in `docs/tickets/` is the durable backlog for **game
-code** work that can be added continuously, including while ready tickets are
-being implemented.
+## Current rebuild
 
-- `inbox` tickets can be added at any time. The interactive lead triages them.
-- Development-cycle changes do not go through the queue; the interactive lead
-  implements them directly without intake or TDD.
-- The interactive lead never implements a proposed game code change; it runs the
-  intake and creates confirmed tickets. The ticket runner implements them.
-- A ticket may move to `ready` only after the user confirms its written brief
-  and the frontmatter has `confirmed: true` with no open questions.
-- The background runner picks only confirmed `ready` tickets whose dependencies
-  are `done` and whose declared file scopes do not overlap active tickets.
-- Recoverable blocked tickets are requeued once automatically with their
-  preserved worktree and a longer agent timeout. Ambiguous tickets move to
-  `needs-info`; exhausted tickets stay `blocked` with
-  `recovery-exhausted: true`. Disable the behavior with `--no-recover`.
-- The runner holds a global lock, heartbeats active tickets, and recovers
-  tickets left `in-progress` by a stale runner lock.
-- Large requests are decomposed into child tickets with narrow scopes and
-  explicit dependencies. Shared contract files are handled by a serialized
-  contract ticket first.
-- Default maximum parallel ticket worktrees is 3. One Playwright/browser suite
-  and one merge/delivery run at a time.
-- Each ticket runs in its own worktree and branch. The `ticket-runner` agent is
-  the lead for that ticket: it follows this guide, TDD, review, and the ticket
-  brief, but must not commit or push.
-- The runner script owns verification, the serialized merge queue, commit,
-  push, live asset polling, the live suite, and ticket status updates.
-- Per-ticket delivery is serialized. The runner may rebase in-flight tickets
-  after a delivery and must re-run verification before merging them.
-- The runner never interviews the user. Ambiguous work stops and is reported as
-  `needs-info`/`blocked`; the interactive lead resolves it.
-- New tickets added while the runner is active wait for triage and scheduling.
-- Ticket status, logs, locks, worktrees, and agent sessions are inspectable; see
-  `docs/tickets/README.md`.
-- The runner must pause instead of mixing unrelated uncommitted code changes in
-  the main worktree into a ticket.
+The project is in a full rebuild from `docs/spec.md`. The previous game remains
+available on `backup/pre-rebuild` and in history.
 
-The queue is operated with `npm.cmd run tickets:run` in a separate terminal,
-or with the interactive `ticket-runner` agent/command for one ticket at a time.
+- Baseline before the rebuild: 136 unit tests, 21 Playwright tests, typecheck,
+  and production build all passed.
+- `docs/spec.md` wins over historical change briefs when they disagree.
+- The autopilot benchmark in the confirmed near-vertical brief (at least 200 m
+  progress per seed, median at least 300 m, average world-x speed at least
+  4 m/s) supersedes the older 400/500/8 values in the spec. The contract ticket
+  must update the spec before implementation.
+- Rebuild tickets run in order:
+
+| Ticket | Scope |
+| --- | --- |
+| T-0003 | Contract alignment: spec, types, constants, exports, target tests |
+| T-0004 | Deterministic field and tunnel: near-vertical, variable width, sampling |
+| T-0005 | Ship physics, canted thrusters, rear booster, drag |
+| T-0006 | Collision, damage, bounce, invulnerability, destruction |
+| T-0007 | Eye, direction, distance-to-start, velocity sensors |
+| T-0008 | Autopilot and the fixed-seed benchmark |
+| T-0009 | Game shell, camera, input, HUD, seed controls, sensor console, renderer |
+| T-0010 | Playwright e2e and documented test hooks |
+| T-0011 | CI, GitHub Pages, live suite, docs reconciliation |
+| T-0012 | Final parity, full verify, live suite, rebuild report |
+
+T-0002 is blocked and superseded by the rebuild; do not run it.
+
+## Development-cycle changes
+
+Development-cycle changes are not game code. They include the ticket queue,
+delivery and CI automation, `AGENTS.md`, agent/command/skill configuration,
+workflow documentation, and tests for that tooling.
+
+- Implement them directly in the interactive session.
+- Do not create a ticket or run the intake interview.
+- Tests do not need a red-first cycle; run the relevant existing checks.
+- Keep game code untouched. If part of the request needs a game change, stop and
+  use the game change workflow for that part.
+- Delivery rules still apply to every successful production build.
 
 ## Agent ownership
 
-- `game-architect`: architecture, simulation API, and boundary reviews. Read-only.
-- `test-engineer`: tests only (`packages/*/test`, `e2e`).
-- `sim-engineer`: implementation only in `packages/sim/src` and
-  `packages/sim/examples`.
-- `gameplay-engineer`: implementation only in `packages/game`.
-- `release-engineer`: CI, deployment, Playwright live verification, scripts.
-- `code-reviewer`: independent review. Read-only.
-- `ticket-runner`: per-ticket lead; may edit and spawn specialists but must not
-  commit, push, or change shared interfaces without the confirmed ticket brief.
+| Agent | Mode | Model | Ownership |
+| --- | --- | --- | --- |
+| `lead` | primary | `opencode-go/deepseek-v4-pro` | intake, briefs, tickets, delegation, review/verify coordination, final report |
+| `sim-engineer` | subagent | `opencode-go/deepseek-v4.1-flash` | `packages/sim/src`, `packages/sim/examples`, package config |
+| `gameplay-engineer` | subagent | `opencode-go/deepseek-v4.1-flash` | `packages/game`, excluding tests |
+| `test-engineer` | subagent | `opencode-go/deepseek-v4.1-flash` | `packages/*/test`, `e2e`, test config |
+| `reviewer` | subagent | `opencode-go/deepseek-v4-pro` | independent read-only review |
+| `release-engineer` | subagent | `opencode-go/deepseek-v4.1-flash` | CI, scripts, root tooling, commit/push, live verification |
 
-Agents must not run `git commit`, `git push`, or modify `.git`. The lead owns
-integration and delivery.
-
-Subagents may spawn additional subagents of their own kind when it genuinely
-parallelizes disjoint work. Delegated agents inherit the same ownership
-boundaries, may not commit or push, and must not change shared interfaces. Keep
-delegation to one additional level and no more than two concurrent children.
-The lead remains responsible for integration and final verification.
+- The `lead` does not edit game code; it delegates.
+- `reviewer` never edits, commits, or pushes.
+- Only `release-engineer` commits and pushes.
+- Subagents may spawn one additional level of their own kind for disjoint work,
+  with at most two concurrent children. Delegated agents inherit the same
+  boundaries.
+- The lead owns final integration and verification.
 
 ## Parallel execution
 
-The lead may run multiple subagents concurrently only when their edit scopes
-are disjoint (for example, simulation tests and game tests, or `packages/sim`
-implementation and `packages/game` implementation). The lead freezes shared
-interfaces in `docs/spec.md` before parallel work starts.
-
-The ticket runner assigns `TICKET_PORT` per worktree, so isolated ticket
-worktrees may run Playwright in parallel on distinct ports up to the configured
-parallel limit. The main worktree uses port 4173. Only one live/deployment
-verification may run at a time, and the merge queue serializes ticket delivery.
-The interactive lead still serializes browser runs outside the ticket runner.
-The lead owns final integration and delivery.
+- The lead may run subagents concurrently only when their edit scopes are
+  disjoint and the shared contract is already frozen.
+- There is no background runner and no worktree fan-out in the current mode.
+- Serialize browser suites, delivery, and live verification.
+- The lead serializes tickets unless a ticket explicitly allows disjoint
+  concurrent work.
 
 ## Engineering rules
 
@@ -291,3 +264,5 @@ The lead owns final integration and delivery.
 - Prefer small pure functions with unit tests.
 - No comments unless they explain non-obvious invariants or physics.
 - Keep the whole project runnable from Node 24 and deployable as static files.
+- Preserve the documented `data-testid` hooks unless a confirmed brief changes
+  them.

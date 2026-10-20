@@ -1,7 +1,10 @@
 # Local Ticket Queue
 
-The ticket queue is a durable local backlog for **game code** work that should
-be picked up by the background ticket runner or the interactive lead.
+The ticket queue is a durable local backlog for **game code** work.
+
+> Current mode: one-session sequential execution. The interactive `lead` claims
+> and executes confirmed tickets in order in the current session. The background
+> runner remains available for later use but is not used now. See `AGENTS.md`.
 
 Development-cycle changes — the ticket/runner/delivery tooling, `AGENTS.md`,
 agent and skill configuration, and workflow documentation — are not game code.
