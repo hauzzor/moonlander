@@ -1,37 +1,48 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  normalizeAssetPath,
+  normalizeBaseUrl,
+  tryReadAssetPathFromIndex,
+} from "./lib/live-asset.mjs";
+import { waitForDeployment } from "./lib/live-deploy.mjs";
 
-const DEFAULT_BASE_URL = "https://hauzzor.github.io/moonlander/";
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
+const distIndexPath = resolve(repositoryRoot, "packages/game/dist/index.html");
 const playwrightCli = createRequire(import.meta.url).resolve("@playwright/test/cli");
 
-function normalizeBaseUrl(value) {
-  const candidate = value?.trim() || DEFAULT_BASE_URL;
-  return candidate.endsWith("/") ? candidate : `${candidate}/`;
+function positiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function waitForDeployment(url, attempts = 20, delayMs = 3000) {
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetch(url, { redirect: "follow" });
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Pages can be briefly unreachable while a deployment propagates.
-    }
+const waitAttempts = positiveInteger(process.env.LIVE_WAIT_ATTEMPTS, 40);
+const waitDelayMs = positiveInteger(process.env.LIVE_WAIT_DELAY_MS, 3_000);
 
-    if (attempt < attempts) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
+async function resolveExpectedAsset() {
+  const explicit = process.env.EXPECT_ASSET?.trim();
+  if (explicit) {
+    return normalizeAssetPath(explicit);
   }
 
-  throw new Error(`Deployed site did not become ready: ${url}`);
+  return tryReadAssetPathFromIndex(distIndexPath);
 }
 
 const targetUrl = normalizeBaseUrl(process.env.BASE_URL);
-await waitForDeployment(targetUrl);
+const expectedAsset = await resolveExpectedAsset();
+
+if (expectedAsset) {
+  console.log(`[live] Expecting ${expectedAsset}`);
+} else {
+  console.log("[live] No built asset found; waiting for the deployed page only");
+}
+
+await waitForDeployment(targetUrl, expectedAsset, {
+  attempts: waitAttempts,
+  delayMs: waitDelayMs,
+});
 
 const child = spawn(
   process.execPath,
@@ -43,10 +54,10 @@ const child = spawn(
   },
 );
 
-const exitCode = await new Promise((resolve, reject) => {
+const exitCode = await new Promise((resolvePromise, reject) => {
   child.once("error", reject);
   child.once("exit", (code, signal) => {
-    resolve(signal ? 1 : (code ?? 1));
+    resolvePromise(signal ? 1 : (code ?? 1));
   });
 });
 

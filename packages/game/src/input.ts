@@ -14,6 +14,36 @@ export interface InputController {
 interface EditableTargetLike {
   tagName?: unknown;
   isContentEditable?: unknown;
+  type?: unknown;
+  getAttribute?: (name: string) => string | null;
+}
+
+const TEXT_INPUT_TYPES = new Set([
+  "text",
+  "search",
+  "number",
+  "email",
+  "password",
+  "url",
+  "tel",
+]);
+
+function inputType(element: EditableTargetLike): string {
+  let type: unknown = element.type;
+
+  if (
+    (typeof type !== "string" || type.length === 0) &&
+    typeof element.getAttribute === "function"
+  ) {
+    type = element.getAttribute("type");
+  }
+
+  if (typeof type !== "string") {
+    return "text";
+  }
+
+  const normalized = type.trim().toLowerCase();
+  return normalized.length === 0 ? "text" : normalized;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -32,7 +62,15 @@ function isEditableTarget(target: EventTarget | null): boolean {
       ? element.tagName.toLowerCase()
       : "";
 
-  return tagName === "input" || tagName === "textarea";
+  if (tagName === "textarea") {
+    return true;
+  }
+
+  if (tagName === "input") {
+    return TEXT_INPUT_TYPES.has(inputType(element));
+  }
+
+  return false;
 }
 
 function preventDefault(event: KeyboardEvent): void {

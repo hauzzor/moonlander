@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import {
+  DEFAULT_LIVE_URL,
+  normalizeBaseUrl,
+  readAssetPathFromIndex,
+  tryReadAssetPathFromIndex,
+} from "./lib/live-asset.mjs";
 
 const DEFAULT_BRANCH = "main";
 const DEFAULT_REMOTE = "origin";
-const DEFAULT_LIVE_URL = "https://hauzzor.github.io/moonlander/";
 const DEFAULT_TIMEOUT_SECONDS = 1200;
 const POLL_INTERVAL_MS = 15_000;
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -43,11 +47,6 @@ Defaults:
   Poll interval: 15 seconds.
 
 The script never force-pushes, amends, or resets commits.`;
-}
-
-function normalizeBaseUrl(value) {
-  const candidate = value?.trim() || DEFAULT_LIVE_URL;
-  return candidate.endsWith("/") ? candidate : `${candidate}/`;
 }
 
 function readValue(argv, index, flag) {
@@ -325,46 +324,14 @@ async function checkStagedWhitespace() {
 }
 
 async function readAssetPath() {
-  let html;
-  try {
-    html = await readFile(distIndexPath, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      throw new Error(
-        `Missing build output: ${distIndexPath}. Run npm run build or omit --skip-verify.`,
-      );
-    }
-    throw error;
-  }
-
-  const scriptMatch = html.match(/<(?:script|link)\b[^>]*\b(?:src|href)\s*=\s*["']([^"']+\.(?:js|mjs))["']/i);
-  const fallbackMatch = html.match(/assets\/[A-Za-z0-9._-]+\.(?:js|mjs)/i);
-  let asset = scriptMatch?.[1] ?? fallbackMatch?.[0];
-
-  if (!asset) {
-    throw new Error(`Could not find a hashed JavaScript asset in ${distIndexPath}`);
-  }
-
-  if (/^https?:\/\//i.test(asset)) {
-    asset = new URL(asset).pathname;
-  }
-
-  const assetsIndex = asset.indexOf("assets/");
-  asset = assetsIndex >= 0 ? asset.slice(assetsIndex) : asset.replace(/^\.?\//, "");
-
-  if (!/^assets\/[^/]+\.(?:js|mjs)$/i.test(asset)) {
-    throw new Error(`Unexpected asset path in ${distIndexPath}: ${asset}`);
-  }
-
-  return asset;
+  return readAssetPathFromIndex(
+    distIndexPath,
+    "Run npm run build or omit --skip-verify.",
+  );
 }
 
 async function tryReadAssetPath() {
-  try {
-    return await readAssetPath();
-  } catch {
-    return undefined;
-  }
+  return tryReadAssetPathFromIndex(distIndexPath);
 }
 
 function liveChecksEnabled(options) {
@@ -398,7 +365,7 @@ function printPlan(options, message) {
       `Poll ${options.liveUrl} every 15s for up to ${options.timeoutSeconds}s until the built asset is served`,
     );
     steps.push(
-      `Live test: BASE_URL=${options.liveUrl} node scripts/test-live.mjs`,
+      `Live test: BASE_URL=${options.liveUrl} EXPECT_ASSET=<built asset> node scripts/test-live.mjs`,
     );
   } else {
     steps.push(options.noPush ? "Skip live checks (--no-push)" : "Skip live checks (--no-live)");
@@ -560,9 +527,11 @@ async function main() {
       step(`Waiting for ${asset} at ${options.liveUrl}`);
       await waitForLiveAsset(options.liveUrl, asset, options.timeoutSeconds);
       step("Running live Playwright suite");
-      detail(`BASE_URL=${options.liveUrl} node scripts/test-live.mjs`);
+      detail(
+        `BASE_URL=${options.liveUrl} EXPECT_ASSET=${asset} node scripts/test-live.mjs`,
+      );
       const live = await runCommand(process.execPath, [liveTestPath], {
-        env: { BASE_URL: options.liveUrl },
+        env: { BASE_URL: options.liveUrl, EXPECT_ASSET: asset },
         allowFailure: true,
         label: "live Playwright suite",
       });
@@ -642,9 +611,11 @@ async function main() {
     await waitForLiveAsset(options.liveUrl, asset, options.timeoutSeconds);
 
     step("Running live Playwright suite");
-    detail(`BASE_URL=${options.liveUrl} node scripts/test-live.mjs`);
+    detail(
+      `BASE_URL=${options.liveUrl} EXPECT_ASSET=${asset} node scripts/test-live.mjs`,
+    );
     const live = await runCommand(process.execPath, [liveTestPath], {
-      env: { BASE_URL: options.liveUrl },
+      env: { BASE_URL: options.liveUrl, EXPECT_ASSET: asset },
       allowFailure: true,
       label: "live Playwright suite",
     });

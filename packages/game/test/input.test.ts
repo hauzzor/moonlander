@@ -44,6 +44,28 @@ function createTestInput(): InputController {
 
 const noLatches = { left: false, right: false, rear: false };
 
+const textEntryInputTypes = [
+  "text",
+  "search",
+  "number",
+  "email",
+  "password",
+  "url",
+  "tel",
+] as const;
+
+function createTypedInput(type: string): FakeHTMLInputElement {
+  const element = new FakeHTMLInputElement();
+  element.setAttribute("type", type);
+  Object.defineProperty(element, "type", {
+    configurable: true,
+    enumerable: true,
+    value: type,
+    writable: true,
+  });
+  return element;
+}
+
 describe("input mapping", () => {
   it.each([
     ["lowercase q", "q", "left"],
@@ -306,6 +328,12 @@ describe("input latch releases", () => {
 describe("input editable targets", () => {
   const editableTargets: [string, () => FakeElement][] = [
     ["input", () => new FakeHTMLInputElement()],
+    ...textEntryInputTypes.map(
+      (type): [string, () => FakeElement] => [
+        `input[type="${type}"]`,
+        () => createTypedInput(type),
+      ],
+    ),
     ["textarea", () => new FakeHTMLTextAreaElement()],
     [
       "contenteditable",
@@ -352,5 +380,119 @@ describe("input editable targets", () => {
 
     expect(input.keys.left).toBe(false);
     expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("keeps the Q and W thrusters responsive while a range slider is focused", () => {
+    const input = createTestInput();
+    const slider = createTypedInput("range");
+
+    const left = dom.window.dispatch("keydown", { key: "q", target: slider });
+    expect(input.keys.left).toBe(true);
+    expect(input.keys).toEqual({ left: true, right: false, rear: false });
+    expect(left.defaultPrevented).toBe(true);
+
+    const right = dom.window.dispatch("keydown", { key: "w", target: slider });
+    expect(input.keys).toEqual({ left: true, right: true, rear: false });
+    expect(right.defaultPrevented).toBe(true);
+
+    const leftUp = dom.window.dispatch("keyup", { key: "q", target: slider });
+    expect(input.keys).toEqual({ left: false, right: true, rear: false });
+    expect(leftUp.defaultPrevented).toBe(true);
+  });
+
+  it("keeps the Space rear latch responsive while a range slider is focused", () => {
+    const input = createTestInput();
+    const slider = createTypedInput("range");
+
+    const pressed = dom.window.dispatch("keydown", {
+      code: "Space",
+      key: " ",
+      target: slider,
+    });
+    expect(input.keys.rear).toBe(true);
+    expect(pressed.defaultPrevented).toBe(true);
+
+    const repeated = dom.window.dispatch("keydown", {
+      code: "Space",
+      key: " ",
+      repeat: true,
+      target: slider,
+    });
+    expect(input.keys.rear).toBe(true);
+    expect(repeated.defaultPrevented).toBe(true);
+
+    const keyup = dom.window.dispatch("keyup", {
+      code: "Space",
+      key: " ",
+      target: slider,
+    });
+    expect(input.keys.rear).toBe(true);
+    expect(keyup.defaultPrevented).toBe(true);
+
+    const released = dom.window.dispatch("keydown", {
+      code: "Space",
+      key: " ",
+      target: slider,
+    });
+    expect(input.keys.rear).toBe(false);
+    expect(released.defaultPrevented).toBe(true);
+  });
+
+  it("toggles autopilot while a range slider is focused", () => {
+    const input = createTestInput();
+    const slider = createTypedInput("range");
+    dom.window.dispatch("keydown", {
+      code: "Space",
+      key: " ",
+      target: slider,
+    });
+    expect(input.keys.rear).toBe(true);
+
+    const event = dom.window.dispatch("keydown", { key: "e", target: slider });
+
+    expect(toggleAutopilot).toHaveBeenCalledTimes(1);
+    expect(input.keys.rear).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("restarts and releases latches while a range slider is focused", () => {
+    const input = createTestInput();
+    const slider = createTypedInput("range");
+    dom.window.dispatch("keydown", { key: "q", target: slider });
+    dom.window.dispatch("keydown", { key: "w", target: slider });
+    dom.window.dispatch("keydown", {
+      code: "Space",
+      key: " ",
+      target: slider,
+    });
+    expect(input.keys).toEqual({ left: true, right: true, rear: true });
+
+    const event = dom.window.dispatch("keydown", { key: "r", target: slider });
+
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(input.keys).toEqual(noLatches);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("keeps autopilot and restart available with slider focus while autopilot is active", () => {
+    autopilotActive = true;
+    const input = createTestInput();
+    const slider = createTypedInput("range");
+
+    dom.window.dispatch("keydown", { key: "q", target: slider });
+    dom.window.dispatch("keydown", { key: "w", target: slider });
+    dom.window.dispatch("keydown", {
+      code: "Space",
+      key: " ",
+      target: slider,
+    });
+    expect(input.keys).toEqual(noLatches);
+
+    dom.window.dispatch("keydown", { key: "e", target: slider });
+    expect(toggleAutopilot).toHaveBeenCalledTimes(1);
+
+    dom.window.dispatch("keydown", { key: "r", target: slider });
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(input.keys).toEqual(noLatches);
   });
 });
