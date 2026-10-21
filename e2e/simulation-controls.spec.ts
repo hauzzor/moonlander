@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { startLevel } from "./helpers";
 
 const SLIDERS = [
   { name: "simulation speed", testId: "sim-speed", valueId: "sim-speed-value" },
@@ -105,7 +106,7 @@ function collectRuntimeErrors(page: Page): string[] {
 test("SIM panel exposes four log sliders with documented bounds and defaults", async ({
   page,
 }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const panel = page.getByTestId("sim-panel");
   const toggle = page.getByTestId("sim-panel-toggle");
@@ -147,7 +148,7 @@ test("SIM panel exposes four log sliders with documented bounds and defaults", a
 test("SIM sliders map log positions to scales and update readouts live", async ({
   page,
 }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   await setSliderPosition(page, "sim-speed", "-1");
   expect((await readStatus(page)).timeScale).toBeCloseTo(0.1, 6);
@@ -193,7 +194,7 @@ test("SIM sliders map log positions to scales and update readouts live", async (
 test("SIM panel collapses and expands and stays available in autopilot", async ({
   page,
 }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const panel = page.getByTestId("sim-panel");
   const toggle = page.getByTestId("sim-panel-toggle");
@@ -226,7 +227,7 @@ test("SIM panel collapses and expands and stays available in autopilot", async (
 test("SIM settings persist across R, seed loads, and reloads", async ({
   page,
 }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   await setSliderPosition(page, "sim-speed", "1");
   await setSliderPosition(page, "gravity-scale", "-1");
@@ -285,23 +286,23 @@ test("SIM settings persist across R, seed loads, and reloads", async ({
   expect(Number(stored.bottomPower)).toBeCloseTo(expected.bottom, 6);
   expect(Number(stored.rearPower)).toBeCloseTo(expected.rear, 6);
 
-  await page.goto("./");
+  await startLevel(page);
   await readExpected();
 });
 
 test("URL settings override localStorage and invalid values fall back or clamp", async ({
   page,
 }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   await setSliderPosition(page, "sim-speed", "0.5");
   await setSliderPosition(page, "gravity-scale", "0.5");
   await setSliderPosition(page, "bottom-power", "1");
   await setSliderPosition(page, "rear-power", "1");
 
-  await page.goto(
-    "./?speed=2&gravity=0.5&bottomPower=0.25&rearPower=4",
-  );
+  await startLevel(page, "sandworm", {
+    search: "speed=2&gravity=0.5&bottomPower=0.25&rearPower=4",
+  });
 
   const fromUrl = await readStatus(page);
   expect(fromUrl.timeScale).toBeCloseTo(2, 6);
@@ -310,7 +311,9 @@ test("URL settings override localStorage and invalid values fall back or clamp",
   expect(fromUrl.rearPower).toBeCloseTo(4, 6);
 
   await page.evaluate(() => window.localStorage.clear());
-  await page.goto("./?speed=abc&gravity=0&bottomPower=-5&rearPower=1000");
+  await startLevel(page, "sandworm", {
+    search: "speed=abc&gravity=0&bottomPower=-5&rearPower=1000",
+  });
 
   const invalid = await readStatus(page);
   expect(invalid.timeScale).toBe(1);
@@ -337,7 +340,7 @@ test("fake clock scales simulated ticks at 0.1x, 1x, and 10x", async ({
   ] as const;
 
   for (const [index, [scale, expected]] of scales.entries()) {
-    await page.goto(`./?speed=${scale}`);
+    await startLevel(page, "sandworm", { search: `speed=${scale}` });
     await expect(page.getByTestId("simulation-status")).toHaveAttribute(
       "data-time-scale",
       scale,
@@ -367,7 +370,7 @@ test("fake clock scales simulated ticks at 0.1x, 1x, and 10x", async ({
 test("SIM slider keyboard control updates readouts without flying the ship", async ({
   page,
 }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const slider = page.getByTestId("sim-speed");
   const readout = page.getByTestId("sim-speed-value");
@@ -413,7 +416,7 @@ test("SIM slider keyboard control updates readouts without flying the ship", asy
 test("SIM controls produce no console errors", async ({ page }) => {
   const errors = collectRuntimeErrors(page);
 
-  await page.goto("./");
+  await startLevel(page);
 
   for (const slider of SLIDERS) {
     await setSliderPosition(page, slider.testId, "0.5");
@@ -442,7 +445,7 @@ test.describe("SIM panel layout", () => {
         width: viewport.width,
         height: viewport.height,
       });
-      await page.goto("./");
+      await startLevel(page);
 
       const panel = page.getByTestId("sim-panel");
       const toggle = page.getByTestId("sim-panel-toggle");

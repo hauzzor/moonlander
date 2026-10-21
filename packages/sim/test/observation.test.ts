@@ -29,18 +29,33 @@ const observationKeys = [
   "eyeSensorRadius",
   "gravityScale",
   "gravity",
+  "gravityAcceleration",
+  "level",
+  "planets",
   "bottomThrusterScale",
   "rearThrusterScale",
+  "topThrusterScale",
   "sensors",
 ].sort();
 
 function expectFiniteObservation(observation: Observation): void {
-  const { sensors, ...numericFields } = observation;
+  const {
+    sensors,
+    level,
+    planets,
+    gravityAcceleration,
+    ...numericFields
+  } = observation;
+  expect(typeof level).toBe("string");
+  expect(Array.isArray(planets)).toBe(true);
+  expect(Number.isFinite(gravityAcceleration.x)).toBe(true);
+  expect(Number.isFinite(gravityAcceleration.y)).toBe(true);
   expect(observation.eyeSensorRadius).toBeDefined();
   expect(Number.isFinite(observation.gravityScale)).toBe(true);
   expect(Number.isFinite(observation.gravity)).toBe(true);
   expect(Number.isFinite(observation.bottomThrusterScale)).toBe(true);
   expect(Number.isFinite(observation.rearThrusterScale)).toBe(true);
+  expect(Number.isFinite(observation.topThrusterScale)).toBe(true);
   expect(sensors).toBeDefined();
   expect(Object.values(numericFields).every(Number.isFinite)).toBe(true);
   expect(Number.isFinite(sensors.eye.radius)).toBe(true);
@@ -74,6 +89,8 @@ describe("tunnel-aware autonomy observation API", () => {
       hull: 100,
       progress: 0,
       score: 0,
+      level: "sandworm",
+      planets: [],
       nearestWallDistance: 23,
       tunnelCenterOffset: 0,
       tunnelHalfWidth: 34,
@@ -83,8 +100,10 @@ describe("tunnel-aware autonomy observation API", () => {
       eyeSensorRadius: sim.EYE_SENSOR_VIEW_DEFAULT,
       gravityScale: sim.GRAVITY_SCALE_DEFAULT,
       gravity: sim.GRAVITY,
+      gravityAcceleration: { x: 0, y: -sim.GRAVITY },
       bottomThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
       rearThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
+      topThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
       sensors: simulation.getState().sensors,
     });
     expectFiniteObservation(observation);
@@ -248,6 +267,12 @@ describe("tunnel-aware autonomy observation API", () => {
       expect(observation.hull).toBe(state.hull);
       expect(observation.progress).toBe(state.progress);
       expect(observation.score).toBe(state.score);
+      expect(observation.level).toBe(state.level);
+      expect(observation.planets).toEqual(state.planets);
+      expect(observation.gravityAcceleration).toEqual(
+        state.gravityAcceleration,
+      );
+      expect(observation.topThrusterScale).toBe(state.topThrusterScale);
     }
 
     expect(simulation.getObservation().y).not.toBe(before.y);

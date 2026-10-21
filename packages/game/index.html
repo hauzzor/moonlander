@@ -25,6 +25,18 @@
             BUILD __BUILD_NUMBER__ &middot; __BUILD_SHA__ &middot; __BUILD_TIME__
           </span>
           <button
+            class="game-menu-button"
+            data-testid="game-menu-button"
+            id="game-menu-button"
+            type="button"
+            aria-haspopup="dialog"
+            aria-controls="game-menu"
+            aria-expanded="false"
+            data-open="false"
+          >
+            MENU
+          </button>
+          <button
             class="changelog-button"
             data-testid="changelog-button"
             id="changelog-button"
@@ -191,6 +203,23 @@
       <main class="game">
         <div class="game-hud">
           <div class="telemetry" role="group" aria-label="Flight telemetry">
+            <div
+              class="hud-item level-hud"
+              data-testid="hud-level"
+              data-level="sandworm"
+            >
+              <span class="hud-label">LEVEL</span>
+              <span
+                class="hud-value level-value"
+                data-testid="level-name"
+                data-level="sandworm"
+              >Inside the Sandworm's Gut</span>
+            </div>
+            <span
+              class="visually-hidden"
+              data-testid="current-level"
+              data-level="sandworm"
+            >Inside the Sandworm's Gut</span>
             <div class="hud-item" data-testid="hud-hull" data-value="100">
               <span class="hud-label">HULL</span>
               <span class="hud-value">100</span>
@@ -290,9 +319,19 @@
           aria-label="Starship course game canvas"
         >
           The Starship tunnel is rendered here. Use Q and W for the bottom
-          thrusters, Space for the rear latch, E for autopilot, and R for a new
-          seeded run. Stay inside the tunnel.
+          thrusters, Space for the rear latch, E for autopilot, R for a new
+          seeded run, and Escape for the mission menu. Stay inside the tunnel.
         </canvas>
+
+        <div
+          class="level-placeholder"
+          data-testid="level-placeholder"
+          data-level="sandworm"
+          aria-hidden="true"
+          hidden
+        >
+          <span class="level-placeholder-text">Open-space preview</span>
+        </div>
 
         <div class="instructions" data-testid="instructions">
           <span><kbd>Q</kbd> left</span>
@@ -300,6 +339,7 @@
           <span><kbd>Space</kbd> rear latch</span>
           <span><kbd>E</kbd> autopilot</span>
           <span><kbd>R</kbd> new run</span>
+          <span><kbd>Esc</kbd> menu</span>
           <span class="instructions-hint">Stay inside the tunnel &mdash; wall impacts damage the hull.</span>
         </div>
 
@@ -415,6 +455,129 @@
           </div>
         </div>
       </main>
+
+      <section
+        class="start-menu"
+        data-testid="start-menu"
+        data-open="false"
+        aria-hidden="true"
+        aria-labelledby="start-menu-title"
+        hidden
+      >
+        <div class="start-menu-panel">
+          <p class="start-menu-kicker">STARSHIP COURSE</p>
+          <h2 class="start-menu-title" id="start-menu-title">
+            Choose a level
+          </h2>
+          <p class="start-menu-copy">
+            Every route is open. Pick a tunnel or drift through planet fields.
+          </p>
+          <div class="level-cards">
+            <button
+              class="level-card"
+              data-testid="level-card-sandworm"
+              data-level="sandworm"
+              data-selected="true"
+              type="button"
+            >
+              <span class="level-card-index">01</span>
+              <span class="level-card-name">Inside the Sandworm's Gut</span>
+              <span class="level-card-detail"
+                >Bending tunnel, wall damage, bottom thrusters.</span
+              >
+            </button>
+            <button
+              class="level-card"
+              data-testid="level-card-gravity"
+              data-level="gravity"
+              data-selected="false"
+              type="button"
+            >
+              <span class="level-card-index">02</span>
+              <span class="level-card-name">Gravity</span>
+              <span class="level-card-detail"
+                >Open space, planet gravity, no walls or ground.</span
+              >
+            </button>
+            <button
+              class="level-card"
+              data-testid="level-card-anti-gravity"
+              data-level="anti-gravity"
+              data-selected="false"
+              type="button"
+            >
+              <span class="level-card-index">03</span>
+              <span class="level-card-name">Anti Gravity</span>
+              <span class="level-card-detail"
+                >Repulsive planet fields and drifting obstacles.</span
+              >
+            </button>
+          </div>
+          <button
+            class="level-start"
+            data-testid="level-start"
+            data-level="sandworm"
+            type="button"
+          >
+            Start selected level
+          </button>
+          <p class="start-menu-hint">
+            <kbd>Q</kbd> left <kbd>W</kbd> right <kbd>Space</kbd> rear
+            <kbd>E</kbd> autopilot <kbd>R</kbd> new run <kbd>Esc</kbd> menu
+          </p>
+        </div>
+      </section>
+
+      <section
+        class="game-menu"
+        data-testid="game-menu"
+        data-open="false"
+        aria-hidden="true"
+        hidden
+      >
+        <div
+          class="game-menu-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="game-menu-title"
+          tabindex="-1"
+        >
+          <p class="game-menu-kicker">MISSION PAUSED</p>
+          <h2 class="game-menu-title" id="game-menu-title">Paused</h2>
+          <p
+            class="game-menu-level"
+            data-testid="game-menu-level"
+            data-level="sandworm"
+          >Inside the Sandworm's Gut</p>
+          <div class="game-menu-actions">
+            <button
+              class="game-menu-action primary"
+              data-testid="menu-resume"
+              id="menu-resume"
+              type="button"
+            >
+              Resume
+            </button>
+            <button
+              class="game-menu-action"
+              data-testid="menu-restart"
+              id="menu-restart"
+              type="button"
+            >
+              Restart
+            </button>
+            <button
+              class="game-menu-action"
+              data-testid="menu-return"
+              id="menu-return"
+              type="button"
+            >
+              Return to Start
+            </button>
+          </div>
+          <p class="game-menu-hint">Press <kbd>Esc</kbd> to resume.</p>
+        </div>
+      </section>
     </div>
 
     <dialog

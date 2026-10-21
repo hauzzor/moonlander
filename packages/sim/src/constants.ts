@@ -26,6 +26,21 @@ export const LEFT_MOUNT: Vec2 = { x: -16, y: -9 };
 export const RIGHT_MOUNT: Vec2 = { x: 16, y: -9 };
 export const REAR_THRUSTER_FORCE = 900;
 export const REAR_MOUNT: Vec2 = { x: -24, y: 0 };
+export const TOP_THRUSTER_FORCE = 1800;
+export const TOP_MOUNT: Vec2 = { x: 0, y: 9 };
+
+export const PLANET_RADIUS = 24;
+export const PLANET_SURFACE_GRAVITY = 8;
+export const PLANET_GRAVITY_RANGE = 480;
+export const PLANET_CELL_SIZE = 500;
+export const PLANET_DENSITY = 0.6;
+export const PLANET_MIN_SURFACE_GAP = 192;
+export const PLANET_SPAWN_CLEARANCE = 300;
+export const PLANET_DRIFT_MIN = 0.2;
+export const PLANET_DRIFT_MAX = 1;
+export const PLANET_DRIFT_SPEED_CAP = 2;
+export const PLANET_DRIFT_DRAG = 0.02;
+export const PLANET_PLANET_RESTITUTION = 0.8;
 
 export const LINEAR_DRAG = 0.35;
 export const ANGULAR_DRAG = 0.25;

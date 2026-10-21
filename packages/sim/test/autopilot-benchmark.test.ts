@@ -306,22 +306,45 @@ function sensorsAreFinite(sensors: Observation["sensors"]): boolean {
   );
 }
 
+function vectorIsFinite(vector: { x: number; y: number }): boolean {
+  return Number.isFinite(vector.x) && Number.isFinite(vector.y);
+}
+
 function observationIsFinite(observation: Observation): boolean {
-  const { sensors, ...numeric } = observation;
-  return numericFieldsAreFinite(numeric) && sensorsAreFinite(sensors);
+  const { sensors, gravityAcceleration, planets, level, ...numeric } =
+    observation;
+  return (
+    numericFieldsAreFinite(numeric) &&
+    typeof level === "string" &&
+    Array.isArray(planets) &&
+    vectorIsFinite(gravityAcceleration) &&
+    sensorsAreFinite(sensors)
+  );
 }
 
 function stateIsFinite(state: SimState): boolean {
-  const { ship, thrusters, sensors, ...numeric } = state;
+  const {
+    ship,
+    thrusters,
+    sensors,
+    gravityAcceleration,
+    planets,
+    level,
+    ...numeric
+  } = state;
 
   return (
     numericFieldsAreFinite(numeric) &&
     numericFieldsAreFinite(ship) &&
     numericFieldsAreFinite(ship.position) &&
     numericFieldsAreFinite(ship.velocity) &&
+    typeof level === "string" &&
+    Array.isArray(planets) &&
+    vectorIsFinite(gravityAcceleration) &&
     typeof thrusters.left === "boolean" &&
     typeof thrusters.right === "boolean" &&
     typeof thrusters.rear === "boolean" &&
+    typeof thrusters.top === "boolean" &&
     sensorsAreFinite(sensors)
   );
 }

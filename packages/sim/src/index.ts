@@ -6,7 +6,10 @@ export type {
   EyeSensorReading,
   Field,
   FieldChunk,
+  LevelId,
   Observation,
+  Planet,
+  PlanetPolarity,
   RunOutcome,
   SensorSuite,
   ShipStart,
@@ -14,9 +17,15 @@ export type {
   Simulation,
   SimulationOptions,
   SimState,
+  SpaceLevelId,
+  SpaceWorld,
+  ThrusterState,
   Tunnel,
+  TunnelWorld,
   Vec2,
   VelocitySensorReading,
+  World,
+  WorldBase,
 } from "./types";
 
 export {
@@ -40,6 +49,18 @@ export {
   INVULNERABILITY_SECONDS,
   LEFT_MOUNT,
   LINEAR_DRAG,
+  PLANET_CELL_SIZE,
+  PLANET_DENSITY,
+  PLANET_DRIFT_DRAG,
+  PLANET_DRIFT_MAX,
+  PLANET_DRIFT_MIN,
+  PLANET_DRIFT_SPEED_CAP,
+  PLANET_GRAVITY_RANGE,
+  PLANET_MIN_SURFACE_GAP,
+  PLANET_PLANET_RESTITUTION,
+  PLANET_RADIUS,
+  PLANET_SPAWN_CLEARANCE,
+  PLANET_SURFACE_GRAVITY,
   REAR_MOUNT,
   REAR_THRUSTER_FORCE,
   RIGHT_MOUNT,
@@ -55,6 +76,8 @@ export {
   THRUSTER_SCALE_DEFAULT,
   THRUSTER_SCALE_MAX,
   THRUSTER_SCALE_MIN,
+  TOP_MOUNT,
+  TOP_THRUSTER_FORCE,
   TUNNEL_BEND_AMPLITUDE,
   TUNNEL_CENTER_Y,
   TUNNEL_HALF_WIDTH,
@@ -71,3 +94,4 @@ export {
 export { createAutopilot } from "./autopilot";
 export { createField } from "./field";
 export { createSimulation } from "./simulation";
+export { createSpaceField } from "./space-field";

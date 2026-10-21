@@ -1,8 +1,12 @@
 import {
   GRAVITY,
+  createSimulation,
   type EyeSensorReading,
+  type Field,
+  type LevelId,
   type SimState,
   type Vec2,
+  type World,
 } from "@moonlander/sim";
 import {
   FakeElement,
@@ -27,11 +31,15 @@ export interface StateOverrides {
   seed?: number;
   time?: number;
   tick?: number;
+  level?: SimState["level"];
+  planets?: SimState["planets"];
   eyeSensorRadius?: number;
   gravityScale?: number;
   gravity?: number;
+  gravityAcceleration?: Vec2;
   bottomThrusterScale?: number;
   rearThrusterScale?: number;
+  topThrusterScale?: number;
 }
 
 export const START_POSITION: Vec2 = { x: 0, y: 60 };
@@ -41,6 +49,7 @@ export function makeState(overrides: StateOverrides = {}): SimState {
   const velocity = overrides.velocity ?? { x: 0, y: 0 };
   const radius = overrides.eyeSensorRadius ?? 120;
   const gravityScale = overrides.gravityScale ?? 1;
+  const gravity = overrides.gravity ?? GRAVITY * gravityScale;
   const eye: EyeSensorReading = {
     radius,
     tick: overrides.tick ?? 0,
@@ -53,6 +62,7 @@ export function makeState(overrides: StateOverrides = {}): SimState {
     tick: overrides.tick ?? 0,
     time: overrides.time ?? 0,
     seed: overrides.seed ?? 1,
+    level: overrides.level ?? "sandworm",
     ship: {
       position,
       velocity,
@@ -65,15 +75,22 @@ export function makeState(overrides: StateOverrides = {}): SimState {
       left: overrides.thrusters?.left ?? false,
       right: overrides.thrusters?.right ?? false,
       rear: overrides.thrusters?.rear ?? false,
+      top: overrides.thrusters?.top ?? false,
     },
     outcome: overrides.outcome ?? "flying",
     score: overrides.score ?? 0,
     progress: overrides.progress ?? 0,
+    planets: overrides.planets ?? [],
     eyeSensorRadius: radius,
     gravityScale,
-    gravity: overrides.gravity ?? GRAVITY * gravityScale,
+    gravity,
+    gravityAcceleration: overrides.gravityAcceleration ?? {
+      x: 0,
+      y: -gravity,
+    },
     bottomThrusterScale: overrides.bottomThrusterScale ?? 1,
     rearThrusterScale: overrides.rearThrusterScale ?? 1,
+    topThrusterScale: overrides.topThrusterScale ?? 1,
     sensors: {
       eye,
       direction: { angle: overrides.angle ?? 0 },
@@ -121,6 +138,16 @@ export interface GameFixture {
   bottomPowerValue: FakeElement;
   rearPowerValue: FakeElement;
   simulationStatus: FakeElement;
+  startMenu: FakeElement;
+  levelCards: Record<LevelId, FakeElement>;
+  levelStart: FakeElement;
+  levelName: FakeElement;
+  hudLevel: FakeElement;
+  gameMenuButton: FakeElement;
+  gameMenu: FakeElement;
+  menuResume: FakeElement;
+  menuRestart: FakeElement;
+  menuReturn: FakeElement;
 }
 
 function addClassedChild(
@@ -245,6 +272,49 @@ export function installGameFixture(
   const simulationStatus = fakeDom.addElement("simulation-status", "span");
   simPanel.appendChild(simulationStatus);
 
+  const levelNames: Record<LevelId, string> = {
+    sandworm: "Inside the Sandworm's Gut",
+    gravity: "Gravity",
+    "anti-gravity": "Anti Gravity",
+  };
+
+  const startMenu = fakeDom.addElement("start-menu", "section");
+  startMenu.classList.add("start-menu");
+  const levelCards = {} as Record<LevelId, FakeElement>;
+  for (const level of Object.keys(levelNames) as LevelId[]) {
+    const card = fakeDom.addElement(`level-card-${level}`, "button");
+    card.classList.add("level-card");
+    card.setAttribute("data-level", level);
+    card.setAttribute("data-selected", "false");
+    card.textContent = levelNames[level];
+    startMenu.appendChild(card);
+    levelCards[level] = card;
+  }
+  const levelStart = fakeDom.addElement("level-start", "button");
+  levelStart.classList.add("level-start");
+  startMenu.appendChild(levelStart);
+  const levelName = fakeDom.addElement("level-name");
+  addClassedChild(levelName, "level-name-value");
+  startMenu.appendChild(levelName);
+
+  const hudLevel = fakeDom.addElement("hud-level");
+  hudLevel.setAttribute("data-level", "sandworm");
+  const hudLevelValue = addClassedChild(hudLevel, "hud-value");
+  hudLevelValue.textContent = levelNames.sandworm;
+
+  const gameMenuButton = fakeDom.addElement("game-menu-button", "button");
+  const gameMenu = fakeDom.addElement("game-menu", "div");
+  gameMenu.classList.add("game-menu", "hidden");
+  gameMenu.setAttribute("data-open", "false");
+  gameMenu.setAttribute("aria-hidden", "true");
+  gameMenu.hidden = true;
+  const menuResume = fakeDom.addElement("menu-resume", "button");
+  const menuRestart = fakeDom.addElement("menu-restart", "button");
+  const menuReturn = fakeDom.addElement("menu-return", "button");
+  gameMenu.appendChild(menuResume);
+  gameMenu.appendChild(menuRestart);
+  gameMenu.appendChild(menuReturn);
+
   const changelogButton = fakeDom.addElement("changelog-button", "button");
   const changelogDialog = fakeDom.addDialog("changelog-dialog");
   const changelogClose = fakeDom.addElement("changelog-close", "button");
@@ -281,7 +351,21 @@ export function installGameFixture(
     bottomPowerValue,
     rearPowerValue,
     simulationStatus,
+    startMenu,
+    levelCards,
+    levelStart,
+    levelName,
+    hudLevel,
+    gameMenuButton,
+    gameMenu,
+    menuResume,
+    menuRestart,
+    menuReturn,
   };
+}
+
+export function worldFor(field: Field): World {
+  return createSimulation({ seed: field.seed, field }).world;
 }
 
 export function deepFreeze<T>(value: T): T {

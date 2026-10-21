@@ -9,7 +9,13 @@ import {
   TUNNEL_START_STRAIGHT,
 } from "./constants";
 import { clamp } from "./geometry";
-import type { CurvedWall, Field, FieldChunk, Tunnel, Vec2 } from "./types";
+import type {
+  CurvedWall,
+  Field,
+  FieldChunk,
+  Tunnel,
+  Vec2,
+} from "./types";
 
 const TAU = Math.PI * 2;
 const TRANSITION_SCALE = 150;
@@ -328,29 +334,55 @@ export function createField(seed: number): Field {
     return chunk;
   }
 
+  function chunksInView(
+    center: Vec2,
+    radius: number,
+  ): readonly FieldChunk[] {
+    const size = FIELD_CHUNK_SIZE;
+    const minCx = Math.floor((center.x - radius) / size);
+    const maxCx = Math.floor((center.x + radius) / size);
+    const minCy = Math.floor((center.y - radius) / size);
+    const maxCy = Math.floor((center.y + radius) / size);
+    const chunks: FieldChunk[] = [];
+
+    for (let cy = minCy; cy <= maxCy; cy += 1) {
+      for (let cx = minCx; cx <= maxCx; cx += 1) {
+        if (circleIntersectsChunk(center, radius, cx, cy)) {
+          chunks.push(getChunk(cx, cy));
+        }
+      }
+    }
+
+    chunks.sort((a, b) => a.coord.y - b.coord.y || a.coord.x - b.coord.x);
+    return chunks;
+  }
+
   return {
     seed: normalizedSeed,
     chunkSize: FIELD_CHUNK_SIZE,
     tunnel,
     getChunk,
-    chunksInView(center: Vec2, radius: number): readonly FieldChunk[] {
-      const size = FIELD_CHUNK_SIZE;
-      const minCx = Math.floor((center.x - radius) / size);
-      const maxCx = Math.floor((center.x + radius) / size);
-      const minCy = Math.floor((center.y - radius) / size);
-      const maxCy = Math.floor((center.y + radius) / size);
-      const chunks: FieldChunk[] = [];
+    chunksInView,
+  };
+}
 
-      for (let cy = minCy; cy <= maxCy; cy += 1) {
-        for (let cx = minCx; cx <= maxCx; cx += 1) {
-          if (circleIntersectsChunk(center, radius, cx, cy)) {
-            chunks.push(getChunk(cx, cy));
-          }
-        }
-      }
+export function createEmptyField(seed: number): Field {
+  const normalizedSeed = seed >>> 0;
+  const tunnel: Tunnel = {
+    halfWidth: 0,
+    halfWidthAt: () => 0,
+    centerAt: (x: number) => ({ x, y: 0 }),
+    headingAt: () => 0,
+  };
 
-      chunks.sort((a, b) => a.coord.y - b.coord.y || a.coord.x - b.coord.x);
-      return chunks;
-    },
+  return {
+    seed: normalizedSeed,
+    chunkSize: FIELD_CHUNK_SIZE,
+    tunnel,
+    getChunk: (cx: number, cy: number) => ({
+      coord: { x: Math.trunc(cx), y: Math.trunc(cy) },
+      walls: [],
+    }),
+    chunksInView: () => [],
   };
 }

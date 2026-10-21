@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { startLevel } from "./helpers";
 
 const UINT32_MAX = 4_294_967_295;
 const DEFAULT_SEED = 1;
@@ -301,7 +302,7 @@ function readCuratedChangelog(): CuratedChangelogEntry[] {
 }
 
 test("Starship HUD exposes finite telemetry and removes landing HUD hooks", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   for (const testId of ["hud-hull", "hud-speed", "hud-progress", "hud-score"]) {
     const telemetry = page.getByTestId(testId);
@@ -336,7 +337,7 @@ test("Starship HUD exposes finite telemetry and removes landing HUD hooks", asyn
 });
 
 test("holding Q activates only the left thruster and releasing it deactivates it", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const leftThruster = page.getByTestId("thruster-left");
   const rightThruster = page.getByTestId("thruster-right");
@@ -351,7 +352,7 @@ test("holding Q activates only the left thruster and releasing it deactivates it
 });
 
 test("holding W activates only the right thruster and releasing it deactivates it", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const leftThruster = page.getByTestId("thruster-left");
   const rightThruster = page.getByTestId("thruster-right");
@@ -366,7 +367,7 @@ test("holding W activates only the right thruster and releasing it deactivates i
 });
 
 test("R starts a new seeded run and restores hull, score, and progress", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const seedDisplay = page.getByTestId("seed-display");
   const initialSeed = await readSeed(page);
@@ -412,7 +413,7 @@ test("R starts a new seeded run and restores hull, score, and progress", async (
 });
 
 test("loading unsigned seed 0, a normal seed, and the maximum seed updates the run", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const seedDisplay = page.getByTestId("seed-display");
   const seedInput = page.getByTestId("seed-input");
@@ -438,7 +439,7 @@ test("loading unsigned seed 0, a normal seed, and the maximum seed updates the r
 });
 
 test("invalid seeds are rejected without resetting the current run", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const seedDisplay = page.getByTestId("seed-display");
   const seedInput = page.getByTestId("seed-input");
@@ -489,7 +490,7 @@ test("invalid seeds are rejected without resetting the current run", async ({ pa
 });
 
 test("pressing Enter in the seed input loads the seed", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const seedInput = page.getByTestId("seed-input");
   await seedInput.fill("123456");
@@ -501,21 +502,24 @@ test("pressing Enter in the seed input loads the seed", async ({ page }) => {
 test("the URL seed parameter loads a valid seed and ignores invalid ones", async ({ page }) => {
   const seedDisplay = page.getByTestId("seed-display");
 
-  await page.goto("./?seed=42");
+  await startLevel(page, "sandworm", { seed: 42 });
   await expect(seedDisplay).toHaveText("42");
 
-  await page.goto("./?seed=0");
+  await startLevel(page, "sandworm", { seed: 0 });
   await expect(seedDisplay).toHaveText("0");
 
-  await page.goto("./?seed=abc");
+  await startLevel(page, "sandworm", { seed: null, search: "seed=abc" });
   await expect(seedDisplay).toHaveText(String(DEFAULT_SEED));
 
-  await page.goto("./?seed=4294967296");
+  await startLevel(page, "sandworm", {
+    seed: null,
+    search: "seed=4294967296",
+  });
   await expect(seedDisplay).toHaveText(String(DEFAULT_SEED));
 });
 
 test("on-screen instructions mention Q, W, Space, E, R, and the tunnel but not gates", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const instructions = page.getByTestId("instructions");
   await expect(instructions).toBeVisible();
@@ -530,7 +534,7 @@ test("on-screen instructions mention Q, W, Space, E, R, and the tunnel but not g
 });
 
 test("eye sensor panel and chart canvas are visible with rendered data", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   await expect(page.getByTestId("eye-sensor-panel")).toBeVisible();
@@ -549,7 +553,7 @@ test("eye sensor panel and chart canvas are visible with rendered data", async (
 });
 
 test("eye sensor radius slider has the configured range and updates its readout", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   await expect(page.getByTestId("eye-sensor-panel")).toBeVisible();
@@ -574,7 +578,7 @@ test("eye sensor radius slider has the configured range and updates its readout"
 });
 
 test("eye sensor radius slider drag applies to the next scheduled scan", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   const chart = page.getByTestId("eye-sensor-chart");
@@ -608,7 +612,7 @@ test("eye sensor radius slider drag applies to the next scheduled scan", async (
 });
 
 test("autopilot restart works while the focused eye sensor slider keeps focus", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   const seedDisplay = page.getByTestId("seed-display");
@@ -658,7 +662,7 @@ test("autopilot restart works while the focused eye sensor slider keeps focus", 
 });
 
 test("eye sensor chart reflects the updated radius at the next scan", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   await expect(page.getByTestId("eye-sensor-panel")).toBeVisible();
@@ -698,7 +702,7 @@ test("eye sensor chart reflects the updated radius at the next scan", async ({ p
 });
 
 test("eye sensor scan radius supports the 20 m and 200 m limits after the next scan", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   const chart = page.getByTestId("eye-sensor-chart");
@@ -724,7 +728,7 @@ test("eye sensor scan radius supports the 20 m and 200 m limits after the next s
 });
 
 test("eye sensor scan tick advances at the one-second cadence", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   const readScan = async (): Promise<{
@@ -772,7 +776,7 @@ test("eye sensor scan tick advances at the one-second cadence", async ({ page })
 });
 
 test("the configured eye sensor radius persists across R", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   const chart = page.getByTestId("eye-sensor-chart");
@@ -800,7 +804,7 @@ test("the configured eye sensor radius persists across R", async ({ page }) => {
 });
 
 test("direction sensor needle and degree readout are visible", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   await expect(page.getByTestId("direction-needle")).toBeVisible();
@@ -813,7 +817,7 @@ test("direction sensor needle and degree readout are visible", async ({ page }) 
 test("direction needle and readout track the autopilot ship angle", async ({ page }) => {
   test.setTimeout(60_000);
 
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   const initial = await readDirectionSnapshot(page);
@@ -852,7 +856,7 @@ test("direction needle and readout track the autopilot ship angle", async ({ pag
 });
 
 test("distance and velocity sensor blocks show numeric values", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   const numericValue = /[-+]?(?:\d+(?:\.\d*)?|\.\d+)/;
@@ -871,7 +875,7 @@ test("distance and velocity sensor blocks show numeric values", async ({ page })
 });
 
 test("distance and velocity sensors update from autopilot ship motion", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await enableAutopilot(page);
 
   const initial = await readSensorSnapshot(page);
@@ -900,7 +904,7 @@ test("distance and velocity sensors update from autopilot ship motion", async ({
 });
 
 test("Space toggles the rear thruster and R resets it off", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const rearThruster = page.getByTestId("thruster-rear");
   await expect(rearThruster).toHaveAttribute("data-active", "false");
@@ -919,7 +923,7 @@ test("Space toggles the rear thruster and R resets it off", async ({ page }) => 
 });
 
 test("rear thruster latch resets on window blur and page hide", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const rearThruster = page.getByTestId("thruster-rear");
 
@@ -941,7 +945,7 @@ test("rear thruster latch resets on window blur and page hide", async ({ page })
 });
 
 test("E toggles autopilot status between MANUAL and AUTOPILOT", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const autopilotStatus = page.getByTestId("autopilot-status");
   await expect(autopilotStatus).toBeVisible();
@@ -958,7 +962,7 @@ test("E toggles autopilot status between MANUAL and AUTOPILOT", async ({ page })
 });
 
 test("E restores manual control with the rear latch off after autopilot", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const autopilotStatus = page.getByTestId("autopilot-status");
   const rearThruster = page.getByTestId("thruster-rear");
@@ -987,7 +991,7 @@ test("E restores manual control with the rear latch off after autopilot", async 
 });
 
 test("autopilot increases progress while active", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const progress = page.getByTestId("hud-progress");
   const initialProgress = await readNumericDataValue(progress);
@@ -1003,7 +1007,7 @@ test("autopilot increases progress while active", async ({ page }) => {
 });
 
 test("autopilot mode persists across R while progress restarts", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const autopilotStatus = page.getByTestId("autopilot-status");
   const progress = page.getByTestId("hud-progress");
@@ -1028,7 +1032,7 @@ test("autopilot mode persists across R while progress restarts", async ({ page }
 });
 
 test("manual mode hides the whole sensor console and radar, and E toggles them", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   await expect(page.getByTestId("autopilot-status")).toHaveAttribute(
     "data-active",
@@ -1053,7 +1057,7 @@ test("manual mode hides the whole sensor console and radar, and E toggles them",
 });
 
 test("revealing the hidden sensor console draws its chart at a real size", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
   await expectSensorConsoleHidden(page);
 
   const chart = page.getByTestId("eye-sensor-chart");
@@ -1083,7 +1087,7 @@ test("revealing the hidden sensor console draws its chart at a real size", async
 });
 
 test("sensor visibility follows autopilot mode across R and seed loads", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const seedDisplay = page.getByTestId("seed-display");
   const seedInput = page.getByTestId("seed-input");
@@ -1115,7 +1119,7 @@ test("sensor visibility follows autopilot mode across R and seed loads", async (
 });
 
 test("build info exposes the documented label and attributes", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const buildInfo = page.getByTestId("build-info");
   await expect(buildInfo).toBeVisible();
@@ -1148,7 +1152,7 @@ test("Change Log modal lists every curated entry newest first and expands entrie
   const curated = readCuratedChangelog();
   expect(curated.length).toBeGreaterThan(0);
 
-  await page.goto("./");
+  await startLevel(page);
 
   const button = page.getByTestId("changelog-button");
   const dialog = page.getByTestId("changelog-dialog");
@@ -1203,7 +1207,7 @@ test("Change Log modal lists every curated entry newest first and expands entrie
 });
 
 test("Change Log closes by button, Escape, and outside click with focus return", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const button = page.getByTestId("changelog-button");
   const dialog = page.getByTestId("changelog-dialog");
@@ -1231,7 +1235,7 @@ test("Change Log closes by button, Escape, and outside click with focus return",
 });
 
 test("game keys are ignored while the Change Log modal is open", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const button = page.getByTestId("changelog-button");
   const dialog = page.getByTestId("changelog-dialog");
@@ -1276,7 +1280,7 @@ test("game keys are ignored while the Change Log modal is open", async ({ page }
 });
 
 test("progress increases while holding Q", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const progress = page.getByTestId("hud-progress");
   const score = page.getByTestId("hud-score");
@@ -1298,7 +1302,7 @@ test("progress increases while holding Q", async ({ page }) => {
 });
 
 test("game canvas contains rendered pixels that differ from its background", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const canvas = page.getByTestId("game-canvas");
   await expect(canvas).toBeVisible();
@@ -1306,7 +1310,7 @@ test("game canvas contains rendered pixels that differ from its background", asy
 });
 
 test("game canvas keeps animating so the radar sweep and scene redraw", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const canvas = page.getByTestId("game-canvas");
   await expect(canvas).toBeVisible();
@@ -1325,7 +1329,7 @@ test("game canvas keeps animating so the radar sweep and scene redraw", async ({
 });
 
 test("outcome overlay is attached but hidden while the Starship is flying", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const outcome = page.getByTestId("outcome");
   await expect(outcome).toBeAttached();
@@ -1345,7 +1349,7 @@ test("destruction shows the outcome overlay with the final score and R restarts"
     }
   });
 
-  await page.goto("./");
+  await startLevel(page);
 
   const outcome = page.getByTestId("outcome");
   const seedDisplay = page.getByTestId("seed-display");
@@ -1388,7 +1392,7 @@ test("destruction shows the outcome overlay with the final score and R restarts"
 
 test("desktop layout has no overflow with the console hidden or visible", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("./");
+  await startLevel(page);
 
   const canvas = page.getByTestId("game-canvas");
   const instructions = page.getByTestId("instructions");
@@ -1410,6 +1414,7 @@ test("desktop layout has no overflow with the console hidden or visible", async 
 
   for (const testId of [
     "hud-hull",
+    "hud-level",
     "hud-speed",
     "hud-progress",
     "hud-score",
@@ -1417,6 +1422,7 @@ test("desktop layout has no overflow with the console hidden or visible", async 
     "thruster-right",
     "thruster-rear",
     "autopilot-status",
+    "game-menu-button",
     "seed-display",
     "seed-input",
     "seed-load",
@@ -1445,6 +1451,7 @@ test("desktop layout has no overflow with the console hidden or visible", async 
 
   for (const testId of [
     "hud-hull",
+    "hud-level",
     "hud-speed",
     "hud-progress",
     "hud-score",
@@ -1452,6 +1459,7 @@ test("desktop layout has no overflow with the console hidden or visible", async 
     "thruster-right",
     "thruster-rear",
     "autopilot-status",
+    "game-menu-button",
     "seed-display",
     "seed-input",
     "seed-load",
@@ -1488,7 +1496,7 @@ test("desktop layout has no overflow with the console hidden or visible", async 
 
 test("narrow layout has no overflow with the console hidden or visible", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("./");
+  await startLevel(page);
 
   const canvas = page.getByTestId("game-canvas");
   const instructions = page.getByTestId("instructions");
@@ -1509,6 +1517,7 @@ test("narrow layout has no overflow with the console hidden or visible", async (
 
   for (const testId of [
     "hud-hull",
+    "hud-level",
     "hud-speed",
     "hud-progress",
     "hud-score",
@@ -1516,6 +1525,7 @@ test("narrow layout has no overflow with the console hidden or visible", async (
     "thruster-right",
     "thruster-rear",
     "autopilot-status",
+    "game-menu-button",
     "seed-display",
     "seed-input",
     "seed-load",
@@ -1544,6 +1554,7 @@ test("narrow layout has no overflow with the console hidden or visible", async (
 
   for (const testId of [
     "hud-hull",
+    "hud-level",
     "hud-speed",
     "hud-progress",
     "hud-score",
@@ -1551,6 +1562,7 @@ test("narrow layout has no overflow with the console hidden or visible", async (
     "thruster-right",
     "thruster-rear",
     "autopilot-status",
+    "game-menu-button",
     "seed-display",
     "seed-input",
     "seed-load",

@@ -85,6 +85,9 @@ function makeObservation(input: ObservationInput = {}): Observation {
     hull: input.hull ?? sim.INITIAL_HULL,
     progress: 0,
     score: 0,
+    level: "sandworm",
+    planets: [],
+    gravityAcceleration: { x: 0, y: -gravity },
     nearestWallDistance:
       input.nearestWallDistance ?? sim.TUNNEL_HALF_WIDTH,
     tunnelCenterOffset: input.tunnelCenterOffset ?? 0,
@@ -99,6 +102,7 @@ function makeObservation(input: ObservationInput = {}): Observation {
       input.bottomThrusterScale ?? sim.THRUSTER_SCALE_DEFAULT,
     rearThrusterScale:
       input.rearThrusterScale ?? sim.THRUSTER_SCALE_DEFAULT,
+    topThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
     sensors: {
       eye: {
         radius: eyeRadius,

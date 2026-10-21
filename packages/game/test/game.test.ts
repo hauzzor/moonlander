@@ -26,6 +26,7 @@ import {
   deepFreeze,
   installGameFixture,
   makeState,
+  worldFor,
   type GameFixture,
 } from "./fixtures";
 
@@ -47,6 +48,8 @@ function observationFor(state: SimState): Observation {
     hull: state.hull,
     progress: state.progress,
     score: state.score,
+    level: state.level,
+    planets: state.planets,
     nearestWallDistance: 100,
     tunnelCenterOffset: 0,
     tunnelHalfWidth: 34,
@@ -56,8 +59,10 @@ function observationFor(state: SimState): Observation {
     eyeSensorRadius: state.eyeSensorRadius,
     gravityScale: state.gravityScale,
     gravity: state.gravity,
+    gravityAcceleration: state.gravityAcceleration,
     bottomThrusterScale: state.bottomThrusterScale,
     rearThrusterScale: state.rearThrusterScale,
+    topThrusterScale: state.topThrusterScale,
     sensors: state.sensors,
   };
 }
@@ -68,6 +73,7 @@ function createScriptedSimulation(
 ): ScriptedSimulation {
   let state = initial;
   let resetState: ((seed?: number) => SimState) | null = null;
+  const world = worldFor(field);
 
   const reset = vi.fn((seed?: number): SimState => {
     if (resetState !== null) {
@@ -79,6 +85,10 @@ function createScriptedSimulation(
 
   return {
     simulation: {
+      get level() {
+        return state.level;
+      },
+      world,
       get field(): Field {
         return field;
       },
@@ -102,6 +112,9 @@ function createScriptedSimulation(
       setRearThrusterScale: (scale: number): void => {
         state = { ...state, rearThrusterScale: scale };
       },
+      setTopThrusterScale: (scale: number): void => {
+        state = { ...state, topThrusterScale: scale };
+      },
     },
     reset,
     step,
@@ -113,8 +126,20 @@ function createScriptedSimulation(
 
 let fixture: GameFixture;
 
+function withLevel(search = ""): string {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+
+  if (!params.has("level")) {
+    params.set("level", "sandworm");
+  }
+
+  return `?${params.toString()}`;
+}
+
 function setupGame(options: GameOptions = {}, search = ""): Game {
-  fixture = installGameFixture({ search });
+  fixture = installGameFixture({ search: withLevel(search) });
   return createGame(options);
 }
 
@@ -359,7 +384,9 @@ describe("fixed-step game loop", () => {
   });
 
   it("clamps long frames and starts and stops the loop", () => {
-    fixture = installGameFixture();
+    fixture = installGameFixture({
+      search: "?level=sandworm&seed=1",
+    });
     const loop: { frame: ((time: number) => void) | null } = { frame: null };
     const cancelFrame = vi.fn();
 
@@ -397,17 +424,17 @@ describe("manual controls", () => {
     {
       name: "Q",
       keys: ["q"],
-      expected: { left: true, right: false, rear: false },
+      expected: { left: true, right: false, rear: false, top: false },
     },
     {
       name: "W",
       keys: ["w"],
-      expected: { left: false, right: true, rear: false },
+      expected: { left: false, right: true, rear: false, top: false },
     },
     {
       name: "Q and W together",
       keys: ["q", "w"],
-      expected: { left: true, right: true, rear: false },
+      expected: { left: true, right: true, rear: false, top: false },
     },
   ];
 
@@ -447,6 +474,7 @@ describe("manual controls", () => {
       left: false,
       right: false,
       rear: false,
+      top: false,
     });
   });
 
@@ -459,6 +487,7 @@ describe("manual controls", () => {
       left: true,
       right: false,
       rear: false,
+      top: false,
     });
 
     advanceTicks(game);
@@ -466,6 +495,7 @@ describe("manual controls", () => {
       left: true,
       right: false,
       rear: false,
+      top: false,
     });
 
     fixture.dom.window.dispatch("keyup", {
@@ -477,6 +507,7 @@ describe("manual controls", () => {
       left: false,
       right: false,
       rear: false,
+      top: false,
     });
   });
 
@@ -543,6 +574,7 @@ describe("manual controls", () => {
       left: false,
       right: false,
       rear: false,
+      top: false,
     });
   });
 });
@@ -554,7 +586,12 @@ describe("autopilot wiring", () => {
     reset: ReturnType<typeof vi.fn>;
     action: Action;
   } {
-    const action: Action = { left: false, right: true, rear: false };
+    const action: Action = {
+      left: false,
+      right: true,
+      rear: false,
+      top: false,
+    };
     const act = vi.fn((_observation: Observation) => action);
     const reset = vi.fn();
     const controller: Controller = { act, reset };
@@ -616,6 +653,7 @@ describe("autopilot wiring", () => {
       left: false,
       right: false,
       rear: false,
+      top: false,
     });
 
     press("w");
@@ -624,6 +662,7 @@ describe("autopilot wiring", () => {
       left: false,
       right: true,
       rear: false,
+      top: false,
     });
   });
 
@@ -824,6 +863,10 @@ describe("HUD, sensor console, and destroyed overlay wiring", () => {
     expect(testId("hud-speed").getAttribute("data-value")).toBe("0");
     expect(testId("hud-progress").getAttribute("data-value")).toBe("0");
     expect(testId("hud-score").getAttribute("data-value")).toBe("0");
+    expect(testId("hud-level").getAttribute("data-level")).toBe("sandworm");
+    expect(testId("hud-level").textContent).toContain(
+      "Inside the Sandworm's Gut",
+    );
     expect(testId("seed-display").textContent).toBe("1");
     expect(fixture.seedInput.value).toBe("1");
 
@@ -933,6 +976,40 @@ describe("HUD, sensor console, and destroyed overlay wiring", () => {
     ]) {
       expect(testId(testIdName).getAttribute("data-active")).toBe("false");
     }
+  });
+
+  it("does not force the pause menu on destruction and keeps all menu actions", () => {
+    const field = createField(7);
+    const destroyed = makeState({
+      seed: 7,
+      hull: 0,
+      outcome: "destroyed",
+      score: 321,
+      progress: 321.4,
+    });
+    const scripted = createScriptedSimulation(destroyed, field);
+    const game = setupGame({ simulation: scripted.simulation });
+
+    expect(testId("outcome").classList.contains("hidden")).toBe(false);
+    expect(game.isStartMenuOpen()).toBe(false);
+    expect(game.isPaused()).toBe(false);
+
+    fixture.gameMenuButton.dispatch("click");
+
+    expect(game.isPaused()).toBe(true);
+    for (const element of [
+      fixture.menuResume,
+      fixture.menuRestart,
+      fixture.menuReturn,
+    ]) {
+      expect(element.hasAttribute("hidden")).toBe(false);
+    }
+
+    fixture.menuReturn.dispatch("click");
+
+    expect(game.isPaused()).toBe(false);
+    expect(game.isStartMenuOpen()).toBe(true);
+    expect(fixture.startMenu.hasAttribute("hidden")).toBe(false);
   });
 
   it("hides the destroyed overlay and starts a new run on R", () => {
@@ -1139,6 +1216,7 @@ describe("sensor visibility, radar gating, and modal input isolation", () => {
       left: false,
       right: false,
       rear: false,
+      top: false,
     });
   });
 
@@ -1168,6 +1246,7 @@ describe("sensor visibility, radar gating, and modal input isolation", () => {
       left: false,
       right: false,
       rear: false,
+      top: false,
     });
     expect(game.getSeed()).toBe(seedBefore);
   });

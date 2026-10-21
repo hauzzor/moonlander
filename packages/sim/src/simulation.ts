@@ -11,6 +11,7 @@ import {
   GRAVITY_SCALE_MIN,
   INITIAL_HULL,
   INVULNERABILITY_SECONDS,
+  PLANET_GRAVITY_RANGE,
   SHIP_INERTIA,
   SHIP_MASS,
   START_POSITION,
@@ -22,7 +23,7 @@ import {
   advanceWithCollisions,
   nearestWallDistance,
 } from "./collision";
-import { createField } from "./field";
+import { createEmptyField, createField } from "./field";
 import { clamp } from "./geometry";
 import {
   applyAngularDrag,
@@ -30,11 +31,15 @@ import {
   thrusterEffect,
 } from "./physics";
 import { clampEyeSensorRadius, scanEyeSensor } from "./sensor";
+import { createSpaceField } from "./space-field";
+import { createTunnelWorld } from "./world";
 import type {
   Action,
   EyeSensorReading,
   Field,
+  LevelId,
   Observation,
+  Planet,
   RunOutcome,
   SensorSuite,
   ShipState,
@@ -42,7 +47,9 @@ import type {
   SimState,
   Simulation,
   SimulationOptions,
+  ThrusterState,
   Vec2,
+  World,
 } from "./types";
 
 const INVULNERABILITY_TICKS = Math.round(
@@ -57,7 +64,7 @@ interface Current {
   body: ShipState;
   hull: number;
   invulnerableTicksRemaining: number;
-  thrusters: Action;
+  thrusters: ThrusterState;
   outcome: RunOutcome;
   progress: number;
   eyeSensorRadius: number;
@@ -67,15 +74,30 @@ interface Current {
 interface Scales {
   gravityScale: number;
   bottomThrusterScale: number;
+  topThrusterScale: number;
   rearThrusterScale: number;
+}
+
+interface BuiltWorld {
+  field: Field;
+  world: World;
 }
 
 function copyVec(vector: Vec2): Vec2 {
   return { x: vector.x, y: vector.y };
 }
 
-function idleThrusters(): Action {
-  return { left: false, right: false, rear: false };
+function idleThrusters(): ThrusterState {
+  return { left: false, right: false, rear: false, top: false };
+}
+
+function normalizeThrusters(action: Action): ThrusterState {
+  return {
+    left: action.left,
+    right: action.right,
+    rear: action.rear,
+    top: action.top ?? false,
+  };
 }
 
 function normalizeScale(
@@ -100,7 +122,7 @@ function initialCurrent(
   body: ShipState,
   hull: number,
   eyeSensorRadius: number,
-  field: Field,
+  world: World,
 ): Current {
   const clampedHull = clamp(hull, 0, INITIAL_HULL);
   const position = copyVec(body.position);
@@ -119,7 +141,7 @@ function initialCurrent(
     outcome: clampedHull <= 0 ? "destroyed" : "flying",
     progress: 0,
     eyeSensorRadius,
-    eyeSensor: scanEyeSensor(field, position, body.angle, eyeSensorRadius, 0),
+    eyeSensor: scanEyeSensor(world, position, body.angle, eyeSensorRadius, 0),
   };
 }
 
@@ -148,16 +170,28 @@ function scoreFor(progress: number): number {
   return Math.floor(progress);
 }
 
+function gravityAccelerationAt(world: World, position: Vec2): Vec2 {
+  const acceleration = world.gravityAt(position);
+  return { x: acceleration.x, y: acceleration.y };
+}
+
+function planetsNear(world: World, position: Vec2): readonly Planet[] {
+  return world.planetsInView(position, PLANET_GRAVITY_RANGE);
+}
+
 function toSimState(
   current: Current,
   seed: number,
+  level: LevelId,
   spawn: Vec2,
   scales: Scales,
+  world: World,
 ): SimState {
   return {
     tick: current.tick,
     time: current.tick * FIXED_DT,
     seed,
+    level,
     ship: {
       position: copyVec(current.body.position),
       velocity: copyVec(current.body.velocity),
@@ -170,38 +204,67 @@ function toSimState(
       left: current.thrusters.left,
       right: current.thrusters.right,
       rear: current.thrusters.rear,
+      top: current.thrusters.top,
     },
     outcome: current.outcome,
     score: scoreFor(current.progress),
     progress: current.progress,
     eyeSensorRadius: current.eyeSensorRadius,
     gravityScale: scales.gravityScale,
-    gravity: GRAVITY * scales.gravityScale,
+    gravity: level === "sandworm" ? GRAVITY * scales.gravityScale : 0,
+    gravityAcceleration: gravityAccelerationAt(world, current.body.position),
     bottomThrusterScale: scales.bottomThrusterScale,
+    topThrusterScale: scales.topThrusterScale,
     rearThrusterScale: scales.rearThrusterScale,
+    planets: planetsNear(world, current.body.position),
     sensors: sensorSuiteFor(current, spawn),
   };
 }
 
-export function createSimulation(options: SimulationOptions = {}): Simulation {
-  const pinnedField = options.field;
-  let activeField: Field =
-    pinnedField ?? createField(options.seed ?? DEFAULT_SEED);
+function tunnelFrame(
+  world: World,
+  position: Vec2,
+  velocity: Vec2,
+): {
+  tunnelCenterOffset: number;
+  tunnelHalfWidth: number;
+  tunnelHeading: number;
+  forwardSpeed: number;
+  lateralSpeed: number;
+} {
+  if (world.kind !== "tunnel") {
+    return {
+      tunnelCenterOffset: 0,
+      tunnelHalfWidth: 0,
+      tunnelHeading: 0,
+      forwardSpeed: velocity.x,
+      lateralSpeed: velocity.y,
+    };
+  }
 
+  const { tunnel } = world.field;
+  const center = tunnel.centerAt(position.x);
+  const heading = tunnel.headingAt(position.x);
+  const tangent = { x: Math.cos(heading), y: Math.sin(heading) };
+  const normal = { x: -Math.sin(heading), y: Math.cos(heading) };
+
+  return {
+    tunnelCenterOffset:
+      (position.x - center.x) * normal.x +
+      (position.y - center.y) * normal.y,
+    tunnelHalfWidth: tunnel.halfWidthAt(position.x),
+    tunnelHeading: heading,
+    forwardSpeed: velocity.x * tangent.x + velocity.y * tangent.y,
+    lateralSpeed: velocity.x * normal.x + velocity.y * normal.y,
+  };
+}
+
+export function createSimulation(options: SimulationOptions = {}): Simulation {
+  const level: LevelId = options.level ?? "sandworm";
+  const pinnedField = options.field;
   const bodyTemplate = initialBody(options.start);
   const hullTemplate = options.hull ?? INITIAL_HULL;
   const spawn = copyVec(bodyTemplate.position);
-  const spawnX = spawn.x;
-  let configuredEyeSensorRadius = clampEyeSensorRadius(
-    options.eyeSensorRadius ?? EYE_SENSOR_VIEW_DEFAULT,
-  );
-  let current = initialCurrent(
-    bodyTemplate,
-    hullTemplate,
-    configuredEyeSensorRadius,
-    activeField,
-  );
-
   const scales: Scales = {
     gravityScale: normalizeScale(
       options.gravityScale ?? GRAVITY_SCALE_DEFAULT,
@@ -215,6 +278,12 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       THRUSTER_SCALE_MAX,
       THRUSTER_SCALE_DEFAULT,
     ),
+    topThrusterScale: normalizeScale(
+      options.topThrusterScale ?? THRUSTER_SCALE_DEFAULT,
+      THRUSTER_SCALE_MIN,
+      THRUSTER_SCALE_MAX,
+      THRUSTER_SCALE_DEFAULT,
+    ),
     rearThrusterScale: normalizeScale(
       options.rearThrusterScale ?? THRUSTER_SCALE_DEFAULT,
       THRUSTER_SCALE_MIN,
@@ -223,15 +292,48 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
     ),
   };
 
+  function buildWorld(seed: number): BuiltWorld {
+    if (level === "sandworm") {
+      const field = pinnedField ?? createField(seed);
+      return {
+        field,
+        world: createTunnelWorld(field, spawn, () => scales.gravityScale),
+      };
+    }
+
+    return {
+      field: createEmptyField(seed),
+      world: createSpaceField(level, seed, spawn, () => scales.gravityScale),
+    };
+  }
+
+  const built = buildWorld(options.seed ?? DEFAULT_SEED);
+  let activeField = built.field;
+  let activeWorld = built.world;
+
+  let configuredEyeSensorRadius = clampEyeSensorRadius(
+    options.eyeSensorRadius ?? EYE_SENSOR_VIEW_DEFAULT,
+  );
+  let current = initialCurrent(
+    bodyTemplate,
+    hullTemplate,
+    configuredEyeSensorRadius,
+    activeWorld,
+  );
+
   const getState = (): SimState =>
-    toSimState(current, activeField.seed, spawn, scales);
+    toSimState(
+      current,
+      activeWorld.seed,
+      level,
+      spawn,
+      scales,
+      activeWorld,
+    );
 
   const getObservation = (): Observation => {
     const { position, velocity } = current.body;
-    const center = activeField.tunnel.centerAt(position.x);
-    const heading = activeField.tunnel.headingAt(position.x);
-    const tangent = { x: Math.cos(heading), y: Math.sin(heading) };
-    const normal = { x: -Math.sin(heading), y: Math.cos(heading) };
+    const frame = tunnelFrame(activeWorld, position, velocity);
 
     return {
       x: position.x,
@@ -243,23 +345,25 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       hull: current.hull,
       progress: current.progress,
       score: scoreFor(current.progress),
+      level,
       nearestWallDistance: nearestWallDistance(
-        activeField,
+        activeWorld,
         position,
         current.body.angle,
       ),
-      tunnelCenterOffset:
-        (position.x - center.x) * normal.x +
-        (position.y - center.y) * normal.y,
-      tunnelHalfWidth: activeField.tunnel.halfWidthAt(position.x),
-      tunnelHeading: heading,
-      forwardSpeed: velocity.x * tangent.x + velocity.y * tangent.y,
-      lateralSpeed: velocity.x * normal.x + velocity.y * normal.y,
+      tunnelCenterOffset: frame.tunnelCenterOffset,
+      tunnelHalfWidth: frame.tunnelHalfWidth,
+      tunnelHeading: frame.tunnelHeading,
+      forwardSpeed: frame.forwardSpeed,
+      lateralSpeed: frame.lateralSpeed,
       eyeSensorRadius: current.eyeSensorRadius,
       gravityScale: scales.gravityScale,
-      gravity: GRAVITY * scales.gravityScale,
+      gravity: level === "sandworm" ? GRAVITY * scales.gravityScale : 0,
+      gravityAcceleration: gravityAccelerationAt(activeWorld, position),
       bottomThrusterScale: scales.bottomThrusterScale,
+      topThrusterScale: scales.topThrusterScale,
       rearThrusterScale: scales.rearThrusterScale,
+      planets: planetsNear(activeWorld, position),
       sensors: sensorSuiteFor(current, spawn),
     };
   };
@@ -267,6 +371,12 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
   return {
     getState,
     getObservation,
+    get level(): LevelId {
+      return level;
+    },
+    get world(): World {
+      return activeWorld;
+    },
     get field(): Field {
       return activeField;
     },
@@ -275,21 +385,27 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         return getState();
       }
 
+      activeWorld.stepBodies(FIXED_DT);
+
+      const thrusters = normalizeThrusters(action);
       const effect = thrusterEffect(
         current.body.angle,
         action,
         scales.bottomThrusterScale,
         scales.rearThrusterScale,
       );
-      const gravity = GRAVITY * scales.gravityScale;
+      const gravityAcceleration = gravityAccelerationAt(
+        activeWorld,
+        current.body.position,
+      );
       const velocity = applyLinearDrag(
         {
           x:
             current.body.velocity.x +
-            (effect.force.x / SHIP_MASS) * FIXED_DT,
+            (effect.force.x / SHIP_MASS + gravityAcceleration.x) * FIXED_DT,
           y:
             current.body.velocity.y +
-            (effect.force.y / SHIP_MASS - gravity) * FIXED_DT,
+            (effect.force.y / SHIP_MASS + gravityAcceleration.y) * FIXED_DT,
         },
         FIXED_DT,
       );
@@ -300,7 +416,7 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       );
 
       const advanced = advanceWithCollisions(
-        activeField,
+        activeWorld,
         current.body.position,
         velocity,
         current.body.angle,
@@ -326,14 +442,14 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
 
       const progress = Math.max(
         current.progress,
-        Math.max(0, advanced.position.x - spawnX),
+        Math.max(0, activeWorld.progressAt(advanced.position)),
       );
       const tick = current.tick + 1;
       const outcome: RunOutcome = hull <= 0 ? "destroyed" : "flying";
       const eyeSensor =
         outcome === "flying" && tick % EYE_SENSOR_INTERVAL_TICKS === 0
           ? scanEyeSensor(
-              activeField,
+              activeWorld,
               advanced.position,
               advanced.angle,
               current.eyeSensorRadius,
@@ -351,7 +467,7 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         },
         hull,
         invulnerableTicksRemaining,
-        thrusters: { left: action.left, right: action.right, rear: action.rear },
+        thrusters,
         outcome,
         progress,
         eyeSensorRadius: current.eyeSensorRadius,
@@ -383,6 +499,14 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         THRUSTER_SCALE_DEFAULT,
       );
     },
+    setTopThrusterScale: (scale: number): void => {
+      scales.topThrusterScale = normalizeScale(
+        scale,
+        THRUSTER_SCALE_MIN,
+        THRUSTER_SCALE_MAX,
+        THRUSTER_SCALE_DEFAULT,
+      );
+    },
     setRearThrusterScale: (scale: number): void => {
       scales.rearThrusterScale = normalizeScale(
         scale,
@@ -392,14 +516,31 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       );
     },
     reset: (seed?: number): SimState => {
-      if (!pinnedField && seed !== undefined) {
-        activeField = createField(seed);
+      if (level === "sandworm") {
+        if (!pinnedField && seed !== undefined) {
+          const field = createField(seed);
+          activeField = field;
+          activeWorld = createTunnelWorld(
+            field,
+            spawn,
+            () => scales.gravityScale,
+          );
+        }
+      } else if (seed !== undefined) {
+        activeField = createEmptyField(seed);
+        activeWorld = createSpaceField(
+          level,
+          seed,
+          spawn,
+          () => scales.gravityScale,
+        );
       }
+
       current = initialCurrent(
         bodyTemplate,
         hullTemplate,
         configuredEyeSensorRadius,
-        activeField,
+        activeWorld,
       );
       return getState();
     },

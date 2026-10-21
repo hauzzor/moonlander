@@ -27,16 +27,34 @@ import { computeViewScale } from "../src/render";
 import {
   installGameFixture,
   makeState,
+  worldFor,
   type GameFixture,
 } from "./fixtures";
 
 let fixture: GameFixture;
 
+function withLevel(
+  fixtureOptions: Parameters<typeof installGameFixture>[0] = {},
+): Parameters<typeof installGameFixture>[0] {
+  const params = new URLSearchParams(
+    (fixtureOptions.search ?? "").replace(/^\?/, ""),
+  );
+
+  if (!params.has("level")) {
+    params.set("level", "sandworm");
+  }
+
+  return {
+    ...fixtureOptions,
+    search: `?${params.toString()}`,
+  };
+}
+
 function setupGame(
   options: GameOptions = {},
   fixtureOptions: Parameters<typeof installGameFixture>[0] = {},
 ): Game {
-  fixture = installGameFixture(fixtureOptions);
+  fixture = installGameFixture(withLevel(fixtureOptions));
   return createGame(options);
 }
 
@@ -58,6 +76,8 @@ function observationFor(state: SimState): Observation {
     hull: state.hull,
     progress: state.progress,
     score: state.score,
+    level: state.level,
+    planets: state.planets,
     nearestWallDistance: 100,
     tunnelCenterOffset: 0,
     tunnelHalfWidth: 34,
@@ -67,8 +87,10 @@ function observationFor(state: SimState): Observation {
     eyeSensorRadius: state.eyeSensorRadius,
     gravityScale: state.gravityScale,
     gravity: state.gravity,
+    gravityAcceleration: state.gravityAcceleration,
     bottomThrusterScale: state.bottomThrusterScale,
     rearThrusterScale: state.rearThrusterScale,
+    topThrusterScale: state.topThrusterScale,
     sensors: state.sensors,
   };
 }
@@ -79,8 +101,13 @@ function scriptedSimulation(
   field: Field,
 ): Simulation {
   let state = initial;
+  const world = worldFor(field);
 
   return {
+    get level() {
+      return state.level;
+    },
+    world,
     get field(): Field {
       return field;
     },
@@ -109,6 +136,9 @@ function scriptedSimulation(
     },
     setRearThrusterScale: (scale: number): void => {
       state = { ...state, rearThrusterScale: scale };
+    },
+    setTopThrusterScale: (scale: number): void => {
+      state = { ...state, topThrusterScale: scale };
     },
   };
 }
@@ -300,7 +330,7 @@ describe("camera time scale", () => {
     const simulation = scriptedSimulation(initial, next, field);
     const loop: { frame: ((time: number) => void) | null } = { frame: null };
 
-    fixture = installGameFixture();
+    fixture = installGameFixture({ search: "?level=sandworm&seed=1" });
     const game = startGame({
       simulation,
       timeScale,

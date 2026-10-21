@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { startLevel } from "./helpers";
 
 function collectRuntimeErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -37,7 +38,7 @@ test("an accessible Moonlander heading is visible", async ({ page }) => {
 });
 
 test("the game canvas is visible with non-zero rendered size", async ({ page }) => {
-  await page.goto("./");
+  await startLevel(page);
 
   const canvas = page.getByTestId("game-canvas");
   await expect(canvas).toBeVisible();
@@ -53,7 +54,7 @@ test("the game canvas is visible with non-zero rendered size", async ({ page }) 
 test("the page plays without uncaught page errors or console errors", async ({ page }) => {
   const errors = collectRuntimeErrors(page);
 
-  await page.goto("./");
+  await startLevel(page);
 
   await page.keyboard.down("q");
   await page.waitForTimeout(150);
@@ -110,7 +111,7 @@ test.describe("high-DPI canvas", () => {
   });
 
   test("canvas backing store tracks CSS size and device pixel ratio through resize", async ({ page }) => {
-    await page.goto("./");
+    await startLevel(page);
 
     const canvas = page.getByTestId("game-canvas");
     await expect(canvas).toBeVisible();

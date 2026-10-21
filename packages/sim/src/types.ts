@@ -3,10 +3,32 @@ export interface Vec2 {
   y: number;
 }
 
+export type LevelId = "sandworm" | "gravity" | "anti-gravity";
+export type SpaceLevelId = Exclude<LevelId, "sandworm">;
+
+export type PlanetPolarity = "attract" | "repel";
+
+export interface Planet {
+  id: string;
+  position: Vec2;
+  velocity: Vec2;
+  radius: number;
+  surfaceGravity: number;
+  polarity: PlanetPolarity;
+}
+
 export interface Action {
   left: boolean;
   right: boolean;
   rear: boolean;
+  top?: boolean;
+}
+
+export interface ThrusterState {
+  left: boolean;
+  right: boolean;
+  rear: boolean;
+  top: boolean;
 }
 
 export type RunOutcome = "flying" | "destroyed";
@@ -48,18 +70,22 @@ export interface SimState {
   tick: number;
   time: number;
   seed: number;
+  level: LevelId;
   ship: ShipState;
   hull: number;
   invulnerable: boolean;
-  thrusters: Action;
+  thrusters: ThrusterState;
   outcome: RunOutcome;
   score: number;
   progress: number;
   eyeSensorRadius: number;
   gravityScale: number;
   gravity: number;
+  gravityAcceleration: Vec2;
   bottomThrusterScale: number;
+  topThrusterScale: number;
   rearThrusterScale: number;
+  planets: readonly Planet[];
   sensors: SensorSuite;
 }
 
@@ -95,14 +121,39 @@ export interface Field {
   chunksInView(center: Vec2, radius: number): readonly FieldChunk[];
 }
 
+export interface WorldBase {
+  seed: number;
+  spawn: Vec2;
+  gravityAt(position: Vec2): Vec2;
+  progressAt(position: Vec2): number;
+  planetsInView(center: Vec2, radius: number): readonly Planet[];
+  wallsInView(center: Vec2, radius: number): readonly CurvedWall[];
+  stepBodies(dt: number): void;
+}
+
+export interface TunnelWorld extends WorldBase {
+  kind: "tunnel";
+  field: Field;
+}
+
+export interface SpaceWorld extends WorldBase {
+  kind: "space";
+  level: LevelId;
+  planets: readonly Planet[];
+}
+
+export type World = TunnelWorld | SpaceWorld;
+
 export interface SimulationOptions {
   seed?: number;
+  level?: LevelId;
   hull?: number;
   start?: ShipStart;
   field?: Field;
   eyeSensorRadius?: number;
   gravityScale?: number;
   bottomThrusterScale?: number;
+  topThrusterScale?: number;
   rearThrusterScale?: number;
 }
 
@@ -116,6 +167,7 @@ export interface Observation {
   hull: number;
   progress: number;
   score: number;
+  level: LevelId;
   nearestWallDistance: number;
   tunnelCenterOffset: number;
   tunnelHalfWidth: number;
@@ -125,8 +177,11 @@ export interface Observation {
   eyeSensorRadius: number;
   gravityScale: number;
   gravity: number;
+  gravityAcceleration: Vec2;
   bottomThrusterScale: number;
+  topThrusterScale: number;
   rearThrusterScale: number;
+  planets: readonly Planet[];
   sensors: SensorSuite;
 }
 
@@ -143,6 +198,9 @@ export interface Simulation {
   setEyeSensorRadius(radius: number): void;
   setGravityScale(scale: number): void;
   setBottomThrusterScale(scale: number): void;
+  setTopThrusterScale(scale: number): void;
   setRearThrusterScale(scale: number): void;
+  readonly level: LevelId;
+  readonly world: World;
   readonly field: Field;
 }

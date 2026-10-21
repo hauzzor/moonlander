@@ -16,8 +16,18 @@ import {
   tunnelContactY,
 } from "./helpers";
 
-const leftThruster: Action = { left: true, right: false, rear: false };
-const rightThruster: Action = { left: false, right: true, rear: false };
+const leftThruster: Action = {
+  left: true,
+  right: false,
+  rear: false,
+  top: false,
+};
+const rightThruster: Action = {
+  left: false,
+  right: true,
+  rear: false,
+  top: false,
+};
 
 function damageFreeSimulation(start?: ShipStart) {
   return createSimulationWithField(
@@ -87,10 +97,13 @@ describe("fixed-step tunnel simulation", () => {
       "bottomThrusterScale",
       "eyeSensorRadius",
       "gravity",
+      "gravityAcceleration",
       "gravityScale",
       "hull",
       "invulnerable",
+      "level",
       "outcome",
+      "planets",
       "progress",
       "rearThrusterScale",
       "score",
@@ -100,11 +113,13 @@ describe("fixed-step tunnel simulation", () => {
       "thrusters",
       "tick",
       "time",
+      "topThrusterScale",
     ]);
     expect(state).toEqual({
       tick: 0,
       time: 0,
       seed: 1,
+      level: "sandworm",
       ship: {
         position: { x: 0, y: 60 },
         velocity: { x: 0, y: 0 },
@@ -117,11 +132,14 @@ describe("fixed-step tunnel simulation", () => {
       outcome: "flying",
       score: 0,
       progress: 0,
+      planets: [],
       eyeSensorRadius: sim.EYE_SENSOR_VIEW_DEFAULT,
       gravityScale: sim.GRAVITY_SCALE_DEFAULT,
       gravity: sim.GRAVITY,
+      gravityAcceleration: { x: 0, y: -sim.GRAVITY },
       bottomThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
       rearThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
+      topThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
       sensors: expect.objectContaining({
         eye: expect.objectContaining({
           radius: sim.EYE_SENSOR_VIEW_DEFAULT,
@@ -363,7 +381,12 @@ describe("fixed-step tunnel simulation", () => {
   });
 
   it("combines Q, W, and rear thrust with balanced torque and drag-adjusted velocities", () => {
-    const action: Action = { left: true, right: true, rear: true };
+    const action: Action = {
+      left: true,
+      right: true,
+      rear: true,
+      top: false,
+    };
     const state = damageFreeSimulation().step(action);
     const dt = sim.FIXED_DT;
     const linearDamping = 1 + sim.LINEAR_DRAG * dt;

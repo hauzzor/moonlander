@@ -24,17 +24,33 @@ import { FakeElement, FakeHTMLInputElement } from "./fake-dom";
 import {
   installGameFixture,
   makeState,
+  worldFor,
   type GameFixture,
   type GameFixtureOptions,
 } from "./fixtures";
 
 let fixture: GameFixture;
 
+function withLevel(fixtureOptions: GameFixtureOptions = {}): GameFixtureOptions {
+  const params = new URLSearchParams(
+    (fixtureOptions.search ?? "").replace(/^\?/, ""),
+  );
+
+  if (!params.has("level")) {
+    params.set("level", "sandworm");
+  }
+
+  return {
+    ...fixtureOptions,
+    search: `?${params.toString()}`,
+  };
+}
+
 function setupGame(
   options: GameOptions = {},
   fixtureOptions: GameFixtureOptions = {},
 ): Game {
-  fixture = installGameFixture(fixtureOptions);
+  fixture = installGameFixture(withLevel(fixtureOptions));
   return createGame(options);
 }
 
@@ -72,8 +88,13 @@ function press(target: unknown, key: string, code = ""): void {
 
 function scriptedSimulation(state: SimState): Simulation {
   let current = state;
+  const world = worldFor(createField(state.seed));
 
   return {
+    get level() {
+      return current.level;
+    },
+    world,
     get field() {
       return createField(state.seed);
     },
@@ -101,6 +122,9 @@ function scriptedSimulation(state: SimState): Simulation {
     },
     setRearThrusterScale: (scale: number): void => {
       current = { ...current, rearThrusterScale: scale };
+    },
+    setTopThrusterScale: (scale: number): void => {
+      current = { ...current, topThrusterScale: scale };
     },
   };
 }
@@ -491,7 +515,7 @@ describe("SIM panel persistence", () => {
   });
 
   it("falls back to defaults when localStorage access throws", () => {
-    fixture = installGameFixture();
+    fixture = installGameFixture({ search: "?level=sandworm&seed=1" });
     vi.spyOn(fixture.dom.window.localStorage, "getItem").mockImplementation(
       () => {
         throw new Error("storage blocked");
@@ -644,7 +668,7 @@ describe("simulation status hook", () => {
       bottomThrusterScale: 3,
       rearThrusterScale: 4,
     });
-    fixture = installGameFixture();
+    fixture = installGameFixture({ search: "?level=sandworm&seed=1" });
     createGame({ simulation: scriptedSimulation(state) });
 
     const status = fixture.simulationStatus;
