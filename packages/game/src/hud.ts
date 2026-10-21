@@ -46,6 +46,18 @@ function findChild(
   return child === null ? null : (child as HTMLElement);
 }
 
+function queryHudElement(testId: string): HTMLElement | null {
+  if (
+    typeof document === "undefined" ||
+    typeof document.querySelector !== "function"
+  ) {
+    return null;
+  }
+
+  const element = document.querySelector(`[data-testid="${testId}"]`);
+  return element === null ? null : (element as HTMLElement);
+}
+
 function toggleClass(
   element: HTMLElement,
   name: string,
@@ -81,6 +93,7 @@ export function createHud(): HudController {
   const thrusterRear = getHudElement("thruster-rear");
   const autopilotStatus = getHudElement("autopilot-status");
   const autopilotValue = findChild(autopilotStatus, ".autopilot-value");
+  const radarStatus = queryHudElement("radar-status");
   const seedDisplay = getHudElement("seed-display");
   const outcome = getHudElement("outcome");
   const outcomeText = findChild(outcome, ".outcome-text");
@@ -143,6 +156,11 @@ export function createHud(): HudController {
           ? "AUTOPILOT"
           : "MANUAL";
       }
+
+      radarStatus?.setAttribute(
+        "data-active",
+        String(values.autopilotActive),
+      );
 
       seedDisplay.textContent = String(state.seed);
       updateOutcome(state);

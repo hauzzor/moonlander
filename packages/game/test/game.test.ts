@@ -25,6 +25,7 @@ import {
   FakeHTMLInputElement,
   installFakeDom,
   type FakeCanvasElement,
+  type FakeDialogElement,
   type FakeDom,
 } from "./fake-dom";
 import { deepFreeze, makeState } from "./fixtures";
@@ -36,6 +37,12 @@ interface GameFixture {
   seedCopy: FakeElement;
   chart: FakeCanvasElement;
   slider: FakeHTMLInputElement;
+  panel: FakeElement;
+  radarStatus: FakeElement;
+  changelogButton: FakeElement;
+  changelogDialog: FakeDialogElement;
+  changelogClose: FakeElement;
+  changelogList: FakeElement;
 }
 
 interface ScriptedSimulation {
@@ -153,8 +160,14 @@ function installGameFixture(search = ""): GameFixture {
   addClassedChild(outcome, "outcome-text");
   addClassedChild(outcome, "outcome-score-value");
 
+  const panel = fakeDom.addElement("eye-sensor-panel", "aside");
   const chart = fakeDom.addCanvas("eye-sensor-chart");
+  chart.clientWidth = 374;
+  chart.clientHeight = 138;
   const slider = fakeDom.addInput("eye-sensor-radius");
+  panel.appendChild(chart);
+  panel.appendChild(slider);
+  fakeDom.addElement("radar-status");
 
   for (const testId of [
     "eye-sensor-radius-value",
@@ -170,6 +183,11 @@ function installGameFixture(search = ""): GameFixture {
     fakeDom.addElement(testId);
   }
 
+  const changelogButton = fakeDom.addElement("changelog-button", "button");
+  const changelogDialog = fakeDom.addDialog("changelog-dialog");
+  const changelogClose = fakeDom.addElement("changelog-close", "button");
+  const changelogList = fakeDom.addElement("changelog-list", "div");
+
   (fakeDom.window as unknown as { location: { search: string } }).location = {
     search,
   };
@@ -181,6 +199,12 @@ function installGameFixture(search = ""): GameFixture {
     seedCopy,
     chart,
     slider,
+    panel,
+    radarStatus: fakeDom.document.element("radar-status")!,
+    changelogButton,
+    changelogDialog,
+    changelogClose,
+    changelogList,
   };
 }
 
@@ -908,6 +932,12 @@ describe("HUD, sensor console, and destroyed overlay wiring", () => {
         ?.textContent,
     ).toBe("MANUAL");
 
+    expect(testId("eye-sensor-panel").getAttribute("data-visible")).toBe(
+      "false",
+    );
+    expect(testId("eye-sensor-panel").hasAttribute("hidden")).toBe(true);
+    expect(testId("radar-status").getAttribute("data-active")).toBe("false");
+
     expect(fixture.chart.getAttribute("data-scan-tick")).toBe("0");
     expect(fixture.chart.getAttribute("data-scan-radius")).toBe("120");
 
@@ -949,6 +979,7 @@ describe("HUD, sensor console, and destroyed overlay wiring", () => {
 
   it("wires the eye-sensor radius slider to the simulation", () => {
     const game = setupGame();
+    press("e");
 
     fixture.slider.value = "200";
     fixture.slider.dispatch("input", { target: fixture.slider });
@@ -1029,6 +1060,229 @@ describe("HUD, sensor console, and destroyed overlay wiring", () => {
     expect(testId("seed-display").textContent).toBe(String(expectedSeed));
     expect(testId("hud-hull").getAttribute("data-value")).toBe("100");
     expect(testId("hud-score").getAttribute("data-value")).toBe("0");
+  });
+});
+
+describe("sensor visibility, radar gating, and modal input isolation", () => {
+  function expectConsoleHidden(): void {
+    const panel = testId("eye-sensor-panel");
+    expect(panel.getAttribute("data-visible")).toBe("false");
+    expect(panel.getAttribute("aria-hidden")).toBe("true");
+    expect(panel.hasAttribute("hidden")).toBe(true);
+    expect(panel.hasAttribute("inert")).toBe(true);
+    expect(fixture.slider.disabled).toBe(true);
+    expect(testId("radar-status").getAttribute("data-active")).toBe("false");
+  }
+
+  function expectConsoleVisible(): void {
+    const panel = testId("eye-sensor-panel");
+    expect(panel.getAttribute("data-visible")).toBe("true");
+    expect(panel.getAttribute("aria-hidden")).toBe("false");
+    expect(panel.hasAttribute("hidden")).toBe(false);
+    expect(panel.hasAttribute("inert")).toBe(false);
+    expect(fixture.slider.disabled).toBe(false);
+    expect(testId("radar-status").getAttribute("data-active")).toBe("true");
+  }
+
+  it("boots in manual mode with the console and radar hidden", () => {
+    setupGame();
+
+    expectConsoleHidden();
+    expect(fixture.panel.classList.contains("hidden")).toBe(false);
+    expect(fixture.dom.document.body.classList.contains("sensors-hidden")).toBe(
+      true,
+    );
+  });
+
+  it("shows the console and radar on E and hides them again on the next E", () => {
+    setupGame();
+
+    press("e");
+    expectConsoleVisible();
+    expect(fixture.dom.document.body.classList.contains("sensors-hidden")).toBe(
+      false,
+    );
+
+    press("e");
+    expectConsoleHidden();
+  });
+
+  it.each([
+    { name: "R", reset: (): void => press("r") },
+    {
+      name: "loadSeed",
+      reset: (game: Game): void => {
+        game.loadSeed(42);
+      },
+    },
+    {
+      name: "the seed control",
+      reset: (): void => {
+        fixture.seedInput.value = "42";
+        fixture.seedLoad.dispatch("click");
+      },
+    },
+  ])(
+    "preserves manual visibility across $name",
+    ({ reset }) => {
+      const game = setupGame();
+      expectConsoleHidden();
+
+      reset(game);
+
+      expect(game.isAutopilotActive()).toBe(false);
+      expectConsoleHidden();
+    },
+  );
+
+  it.each([
+    { name: "R", reset: (): void => press("r") },
+    {
+      name: "loadSeed",
+      reset: (game: Game): void => {
+        game.loadSeed(42);
+      },
+    },
+    {
+      name: "the seed control",
+      reset: (): void => {
+        fixture.seedInput.value = "42";
+        fixture.seedLoad.dispatch("click");
+      },
+    },
+  ])(
+    "preserves autopilot visibility across $name",
+    ({ reset }) => {
+      const game = setupGame();
+      press("e");
+      expectConsoleVisible();
+
+      reset(game);
+
+      expect(game.isAutopilotActive()).toBe(true);
+      expectConsoleVisible();
+      expect(testId("autopilot-status").getAttribute("data-active")).toBe(
+        "true",
+      );
+    },
+  );
+
+  it("keeps scanning and updating hidden console values, then redraws on reveal", () => {
+    const game = setupGame();
+
+    expect(advanceTicks(game, 120)).toBe(120);
+    game.render();
+    expect(game.getState().tick).toBe(120);
+    expect(game.getState().sensors.eye.tick).toBe(120);
+    expect(fixture.chart.getAttribute("data-scan-tick")).toBe("120");
+    expect(fixture.chart.getAttribute("data-scan-radius")).toBe("120");
+    expect(testId("eye-sensor-scan-tick").textContent).toBe("120");
+    expectConsoleHidden();
+
+    const beforeReveal = fixture.chart.context.calls.length;
+    press("e");
+
+    expectConsoleVisible();
+    expect(fixture.chart.getAttribute("data-scan-tick")).toBe("120");
+    expect(fixture.chart.width).toBe(374);
+    expect(fixture.chart.height).toBe(138);
+    expect(fixture.chart.context.calls.length).toBeGreaterThan(beforeReveal);
+  });
+
+  it("keeps autopilot visibility while the run is already destroyed", () => {
+    const field = createField(7);
+    const scripted = createScriptedSimulation(
+      makeState({ seed: 7, hull: 0, outcome: "destroyed" }),
+      field,
+    );
+    setupGame({ simulation: scripted.simulation });
+
+    expectConsoleHidden();
+    press("e");
+
+    expectConsoleVisible();
+    expect(testId("outcome").classList.contains("hidden")).toBe(false);
+  });
+
+  it("moves focus out of the console when E hides it", () => {
+    setupGame();
+    press("e");
+    fixture.slider.focus();
+    expect(fixture.dom.document.activeElement).toBe(fixture.slider);
+
+    press("e");
+
+    const active = fixture.dom.document.activeElement;
+    expect(active).not.toBe(fixture.slider);
+    expect(fixture.panel.contains(active)).toBe(false);
+  });
+
+  it("releases held thrusters when the changelog modal opens", () => {
+    const game = setupGame();
+    press("q");
+    expect(game.input.keys.left).toBe(true);
+
+    fixture.changelogButton.dispatch("click");
+
+    expect(fixture.changelogDialog.hasAttribute("open")).toBe(true);
+    expect(game.input.keys).toEqual({
+      left: false,
+      right: false,
+      rear: false,
+    });
+
+    advanceTicks(game);
+    expect(game.getState().thrusters).toEqual({
+      left: false,
+      right: false,
+      rear: false,
+    });
+  });
+
+  it("blocks Q, W, Space, E, and R while the changelog modal is open", () => {
+    const game = setupGame();
+    const seedBefore = game.getSeed();
+
+    fixture.changelogButton.dispatch("click");
+    expect(fixture.changelogDialog.hasAttribute("open")).toBe(true);
+
+    press("q");
+    press("w");
+    pressSpace();
+    press("e");
+    press("r");
+
+    expect(game.input.keys).toEqual({
+      left: false,
+      right: false,
+      rear: false,
+    });
+    expect(game.isAutopilotActive()).toBe(false);
+    expect(game.getSeed()).toBe(seedBefore);
+
+    advanceTicks(game);
+    expect(game.getState().thrusters).toEqual({
+      left: false,
+      right: false,
+      rear: false,
+    });
+    expect(game.getSeed()).toBe(seedBefore);
+  });
+
+  it("resumes game keys after the changelog modal closes", () => {
+    const game = setupGame();
+    const seedBefore = game.getSeed();
+
+    fixture.changelogButton.dispatch("click");
+    press("r");
+    expect(game.getSeed()).toBe(seedBefore);
+
+    fixture.changelogClose.dispatch("click");
+    expect(fixture.changelogDialog.hasAttribute("open")).toBe(false);
+
+    press("r");
+    expect(game.getSeed()).not.toBe(seedBefore);
+    expect(game.isAutopilotActive()).toBe(false);
   });
 });
 

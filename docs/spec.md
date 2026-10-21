@@ -287,16 +287,29 @@ are removed. The generic wall-proximity range is `WALL_SENSOR_RANGE`.
   playable view.
 - HUD telemetry: hull, speed, progress, score, bottom/rear thruster states, and
   autopilot status.
+- The top bar shows build metadata:
+  `BUILD <run> · <short-sha> · <YYYY-MM-DD HH:MM UTC>`, with `DEV` for the run
+  number locally. The metadata is injected into the page at build time and must
+  not change the hashed JS/CSS asset names.
+- A Change Log button opens a modal containing the curated history from
+  `docs/CHANGELOG.md`, newest first, with expandable entries and a scrollable
+  list. Escape, an outside click, and a close button dismiss it; focus returns
+  to the button. Game keys do not affect the simulation while it is open.
 - The bottom-right sensor console contains:
   - the eye-sensor chart, world-angle X axis, rim distances, radius slider, and
     scan tick;
   - the direction needle with signed-degree readout;
   - distance to start in meters;
   - velocity speed, world components, and direction.
+- The sensor console and radar are visible only while autopilot is active. In
+  manual mode they are hidden; the radius slider is available only while the
+  console is visible. All sensor test hooks stay in the DOM while hidden.
+- Revealing the console redraws the chart at its current size. A radar status
+  hook reports whether the radar is drawn.
 - The current seed is displayed. The player can copy it or enter a specific
   seed to replay a tunnel.
-- `R` generates a new seed and restarts; the autopilot mode persists and its
-  controller resets.
+- `R` generates a new seed and restarts; the autopilot mode and sensor
+  visibility persist and the controller resets.
 - Outcome overlay for a destroyed Starship, including the final score.
 - The page remains fully playable with `Q`, `W`, `Space`, `E`, and `R`.
 - Instructions mention Q, W, Space, E, and R, and describe staying inside the
@@ -320,9 +333,17 @@ The playable page must expose these stable hooks for Playwright:
 - `data-testid="seed-display"` showing the current seed
 - `data-testid="seed-input"` accepting an unsigned seed and
   `data-testid="seed-load"` loading it
-- `data-testid="eye-sensor-panel"` containing the eye controls and chart
+- `data-testid="build-info"` with `data-build-number`, `data-build-sha`,
+  `data-build-time`, and `data-build-source="ci|local"`
+- `data-testid="changelog-button"`, `changelog-dialog`, `changelog-close`,
+  `changelog-list`, and `changelog-entry` with `data-expanded`
+- `data-testid="eye-sensor-panel"` containing the eye controls and chart, with
+  `data-visible="true|false"`, `hidden`, `aria-hidden`, and `inert` while
+  manual
 - `data-testid="eye-sensor-chart"` with `data-scan-tick` and `data-scan-radius`
   attributes reflecting the last scan
+- `data-testid="radar-status"` with `data-active="true|false"` while the radar
+  is drawn
 - `data-testid="eye-sensor-radius"` range input with min `20`, max `200`,
   step `5`, default `120`
 - `data-testid="eye-sensor-radius-value"` showing the configured radius
@@ -605,6 +626,12 @@ Observation semantics:
   seed controls, eye-sensor console, direction needle, distance/velocity blocks,
   autopilot status, rear thruster, input-driven progress, restart, and the
   hidden outcome overlay.
+- Unit tests cover build formatting, changelog parsing, sensor visibility,
+  modal input isolation, and renderer gating.
+- Playwright verifies the build label, the Change Log modal, manual/autopilot
+  sensor visibility, focus behavior, responsive layout, and console errors.
+- Two consecutive builds with different build times must keep identical JS/CSS
+  asset names.
 - CI runs typecheck, unit tests, `sim:demo`, browser tests, and production build.
 - The full live Playwright suite runs against the deployed GitHub Pages URL.
 

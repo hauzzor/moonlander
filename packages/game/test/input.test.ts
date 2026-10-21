@@ -18,12 +18,14 @@ import {
 
 let dom: FakeDom;
 let autopilotActive: boolean;
+let modalOpen: boolean;
 let restart: Mock<() => void>;
 let toggleAutopilot: Mock<() => void>;
 
 beforeEach(() => {
   dom = installFakeDom();
   autopilotActive = false;
+  modalOpen = false;
   restart = vi.fn();
   toggleAutopilot = vi.fn(() => {
     autopilotActive = !autopilotActive;
@@ -39,6 +41,7 @@ function createTestInput(): InputController {
     onRestart: restart,
     onToggleAutopilot: toggleAutopilot,
     isAutopilotActive: () => autopilotActive,
+    isModalOpen: () => modalOpen,
   });
 }
 
@@ -264,6 +267,78 @@ describe("input mapping", () => {
     input.release();
 
     expect(input.keys).toEqual(noLatches);
+  });
+});
+
+describe("modal input isolation", () => {
+  const gameKeys: [string, string, string | undefined][] = [
+    ["Q", "KeyQ", "q"],
+    ["W", "KeyW", "w"],
+    ["Space", "Space", " "],
+    ["E", "KeyE", "e"],
+    ["R", "KeyR", "r"],
+  ];
+
+  it.each(gameKeys)(
+    "blocks %s while the modal is open",
+    (_name, code, key) => {
+      modalOpen = true;
+      const input = createTestInput();
+
+      dom.window.dispatch("keydown", {
+        key: key ?? "",
+        code,
+        target: dom.window,
+      });
+
+      expect(input.keys).toEqual(noLatches);
+      expect(toggleAutopilot).not.toHaveBeenCalled();
+      expect(restart).not.toHaveBeenCalled();
+    },
+  );
+
+  it("blocks every game key in one modal session", () => {
+    modalOpen = true;
+    const input = createTestInput();
+
+    for (const [, code, key] of gameKeys) {
+      dom.window.dispatch("keydown", {
+        key: key ?? "",
+        code,
+        target: dom.window,
+      });
+    }
+
+    expect(input.keys).toEqual(noLatches);
+    expect(toggleAutopilot).not.toHaveBeenCalled();
+    expect(restart).not.toHaveBeenCalled();
+  });
+
+  it("still releases a held thruster on keyup while the modal is open", () => {
+    const input = createTestInput();
+    dom.window.dispatch("keydown", { key: "q", target: dom.window });
+    expect(input.keys.left).toBe(true);
+
+    modalOpen = true;
+    dom.window.dispatch("keyup", { key: "q", target: dom.window });
+
+    expect(input.keys).toEqual(noLatches);
+  });
+
+  it("resumes game keys after the modal closes", () => {
+    modalOpen = true;
+    const input = createTestInput();
+    dom.window.dispatch("keydown", { key: "q", target: dom.window });
+    expect(input.keys.left).toBe(false);
+
+    modalOpen = false;
+    dom.window.dispatch("keydown", { key: "q", target: dom.window });
+    expect(input.keys.left).toBe(true);
+
+    dom.window.dispatch("keydown", { key: "e", target: dom.window });
+    expect(toggleAutopilot).toHaveBeenCalledTimes(1);
+    dom.window.dispatch("keydown", { key: "r", target: dom.window });
+    expect(restart).toHaveBeenCalledTimes(1);
   });
 });
 

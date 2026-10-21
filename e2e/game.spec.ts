@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const UINT32_MAX = 4_294_967_295;
@@ -188,6 +189,115 @@ async function readSeed(page: Page): Promise<number> {
   expect(seed).toBeGreaterThanOrEqual(0);
   expect(seed).toBeLessThanOrEqual(UINT32_MAX);
   return seed;
+}
+
+async function blurActiveElement(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) {
+      active.blur();
+    }
+  });
+}
+
+async function setAutopilot(page: Page, active: boolean): Promise<void> {
+  await blurActiveElement(page);
+  const status = page.getByTestId("autopilot-status");
+
+  if ((await status.getAttribute("data-active")) !== String(active)) {
+    await page.keyboard.press("e");
+  }
+
+  await expect(status).toHaveAttribute("data-active", String(active));
+}
+
+async function enableAutopilot(page: Page): Promise<void> {
+  await setAutopilot(page, true);
+  await expectSensorConsoleVisible(page);
+}
+
+async function expectSensorConsoleHidden(page: Page): Promise<void> {
+  const panel = page.getByTestId("eye-sensor-panel");
+
+  await expect(panel).toBeHidden();
+  await expect(panel).toHaveAttribute("data-visible", "false");
+  await expect(panel).toHaveAttribute("aria-hidden", "true");
+  expect(
+    await panel.evaluate((element) => element.hasAttribute("hidden")),
+  ).toBe(true);
+  expect(
+    await panel.evaluate((element) => element.hasAttribute("inert")),
+  ).toBe(true);
+  await expect(page.getByTestId("radar-status")).toHaveAttribute(
+    "data-active",
+    "false",
+  );
+}
+
+async function expectSensorConsoleVisible(page: Page): Promise<void> {
+  const panel = page.getByTestId("eye-sensor-panel");
+
+  await expect(panel).toBeVisible();
+  await expect(panel).toHaveAttribute("data-visible", "true");
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  expect(
+    await panel.evaluate((element) => element.hasAttribute("hidden")),
+  ).toBe(false);
+  expect(
+    await panel.evaluate((element) => element.hasAttribute("inert")),
+  ).toBe(false);
+  await expect(page.getByTestId("radar-status")).toHaveAttribute(
+    "data-active",
+    "true",
+  );
+}
+
+async function expectNoHorizontalOverflow(page: Page): Promise<void> {
+  const widths = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+
+  expect(widths.scrollWidth).toBeLessThanOrEqual(widths.clientWidth + 1);
+}
+
+interface BuildInfoSnapshot {
+  text: string;
+  number: string | null;
+  sha: string | null;
+  time: string | null;
+  source: string | null;
+}
+
+async function readBuildInfo(page: Page): Promise<BuildInfoSnapshot> {
+  return page.getByTestId("build-info").evaluate((element) => ({
+    text: (element.textContent ?? "").replace(/\s+/g, " ").trim(),
+    number: element.getAttribute("data-build-number"),
+    sha: element.getAttribute("data-build-sha"),
+    time: element.getAttribute("data-build-time"),
+    source: element.getAttribute("data-build-source"),
+  }));
+}
+
+interface CuratedChangelogEntry {
+  date: string;
+  title: string;
+}
+
+function readCuratedChangelog(): CuratedChangelogEntry[] {
+  const markdown = readFileSync(
+    new URL("../docs/CHANGELOG.md", import.meta.url),
+    "utf8",
+  );
+  const entries: CuratedChangelogEntry[] = [];
+
+  for (const match of markdown.matchAll(
+    /^## (\d{4}-\d{2}-\d{2}) \u2014 (.+)$/gm,
+  )) {
+    entries.push({ date: match[1]!, title: match[2]!.trim() });
+  }
+
+  return entries;
 }
 
 test("Starship HUD exposes finite telemetry and removes landing HUD hooks", async ({ page }) => {
@@ -421,6 +531,7 @@ test("on-screen instructions mention Q, W, Space, E, R, and the tunnel but not g
 
 test("eye sensor panel and chart canvas are visible with rendered data", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   await expect(page.getByTestId("eye-sensor-panel")).toBeVisible();
 
@@ -439,6 +550,7 @@ test("eye sensor panel and chart canvas are visible with rendered data", async (
 
 test("eye sensor radius slider has the configured range and updates its readout", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   await expect(page.getByTestId("eye-sensor-panel")).toBeVisible();
 
@@ -463,6 +575,7 @@ test("eye sensor radius slider has the configured range and updates its readout"
 
 test("eye sensor radius slider drag applies to the next scheduled scan", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   const chart = page.getByTestId("eye-sensor-chart");
   const slider = page.getByTestId("eye-sensor-radius");
@@ -494,44 +607,35 @@ test("eye sensor radius slider drag applies to the next scheduled scan", async (
     .toBe(String(configured));
 });
 
-test("game controls work while the focused eye sensor slider keeps focus", async ({ page }) => {
+test("autopilot restart works while the focused eye sensor slider keeps focus", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   const seedDisplay = page.getByTestId("seed-display");
   const slider = page.getByTestId("eye-sensor-radius");
-  const leftThruster = page.getByTestId("thruster-left");
-  const rearThruster = page.getByTestId("thruster-rear");
+  const radiusValue = page.getByTestId("eye-sensor-radius-value");
+  const chart = page.getByTestId("eye-sensor-chart");
   const autopilotStatus = page.getByTestId("autopilot-status");
 
   await slider.focus();
   await expect(slider).toBeFocused();
+  await slider.press("Home");
+  await expect(slider).toHaveValue("20");
+  await expect(radiusValue).toContainText("20");
 
-  const box = await slider.boundingBox();
-  expect(box).not.toBeNull();
-
-  if (box !== null) {
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.25, box.y + box.height / 2, {
-      steps: 8,
-    });
-    await page.mouse.up();
-  }
-
-  await expect(slider).toBeFocused();
   const configured = Number(await slider.inputValue());
-  expect(Number.isFinite(configured)).toBe(true);
-  expect(configured).toBeGreaterThanOrEqual(20);
-  expect(configured).toBeLessThanOrEqual(200);
-  expect(configured).not.toBe(120);
-
+  expect(configured).toBe(20);
   const seedBefore = await readSeed(page);
 
   await page.keyboard.press("r");
 
   await expect(slider).toBeFocused();
   await expect(seedDisplay).not.toHaveText(String(seedBefore));
-  await expect(slider).toHaveValue(String(configured));
+  await expect(slider).toHaveValue("20");
+  await expect(radiusValue).toContainText("20");
+  await expect(autopilotStatus).toHaveAttribute("data-active", "true");
+  await expect(autopilotStatus).toContainText("AUTOPILOT");
+  await expectSensorConsoleVisible(page);
 
   const reset = await readTestIdNumbers(page, [
     "hud-hull",
@@ -539,35 +643,23 @@ test("game controls work while the focused eye sensor slider keeps focus", async
     "hud-score",
   ]);
   expect(reset["hud-hull"]!).toBe(100);
-  expect(reset["hud-progress"]!).toBe(0);
-  expect(reset["hud-score"]!).toBe(0);
+  expect(reset["hud-score"]!).toBe(reset["hud-progress"]!);
 
-  await page.keyboard.down("q");
-  try {
-    await expect(slider).toBeFocused();
-    await expect(leftThruster).toHaveAttribute("data-active", "true");
-  } finally {
-    await page.keyboard.up("q");
-  }
-  await expect(leftThruster).toHaveAttribute("data-active", "false");
-  await expect(slider).toBeFocused();
-
-  await page.keyboard.press("Space");
-  await expect(rearThruster).toHaveAttribute("data-active", "true");
-  await page.keyboard.press("Space");
-  await expect(rearThruster).toHaveAttribute("data-active", "false");
+  await expect
+    .poll(() => chart.getAttribute("data-scan-radius"), { timeout: 5_000 })
+    .toBe("20");
 
   await page.keyboard.press("e");
-  await expect(autopilotStatus).toHaveAttribute("data-active", "true");
-  await expect(autopilotStatus).toContainText("AUTOPILOT");
-  await page.keyboard.press("e");
+
   await expect(autopilotStatus).toHaveAttribute("data-active", "false");
   await expect(autopilotStatus).toContainText("MANUAL");
-  await expect(slider).toBeFocused();
+  await expectSensorConsoleHidden(page);
+  await expect(slider).not.toBeFocused();
 });
 
 test("eye sensor chart reflects the updated radius at the next scan", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   await expect(page.getByTestId("eye-sensor-panel")).toBeVisible();
 
@@ -607,6 +699,7 @@ test("eye sensor chart reflects the updated radius at the next scan", async ({ p
 
 test("eye sensor scan radius supports the 20 m and 200 m limits after the next scan", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   const chart = page.getByTestId("eye-sensor-chart");
   const slider = page.getByTestId("eye-sensor-radius");
@@ -632,6 +725,7 @@ test("eye sensor scan radius supports the 20 m and 200 m limits after the next s
 
 test("eye sensor scan tick advances at the one-second cadence", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   const readScan = async (): Promise<{
     tick: string | null;
@@ -679,6 +773,7 @@ test("eye sensor scan tick advances at the one-second cadence", async ({ page })
 
 test("the configured eye sensor radius persists across R", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   const chart = page.getByTestId("eye-sensor-chart");
   const slider = page.getByTestId("eye-sensor-radius");
@@ -706,6 +801,7 @@ test("the configured eye sensor radius persists across R", async ({ page }) => {
 
 test("direction sensor needle and degree readout are visible", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   await expect(page.getByTestId("direction-needle")).toBeVisible();
 
@@ -714,42 +810,50 @@ test("direction sensor needle and degree readout are visible", async ({ page }) 
   await expect(directionValue).toContainText(/[-+]?\d+(?:\.\d+)?\s*(?:°|deg(?:rees)?)/i);
 });
 
-test("direction needle and readout track the ship angle", async ({ page }) => {
+test("direction needle and readout track the autopilot ship angle", async ({ page }) => {
+  test.setTimeout(60_000);
+
   await page.goto("./");
+  await enableAutopilot(page);
 
-  const stationary = await readDirectionSnapshot(page);
-  expect(Number.isFinite(stationary.direction)).toBe(true);
-  expect(Math.abs(stationary.direction)).toBeLessThanOrEqual(0.05);
-  expect(stationary.needle).toMatch(/^-?\d+(?:\.\d+)?deg$/);
+  const initial = await readDirectionSnapshot(page);
+  expect(Number.isFinite(initial.direction)).toBe(true);
+  expect(initial.direction).toBeGreaterThanOrEqual(-180);
+  expect(initial.direction).toBeLessThanOrEqual(180);
+  expect(initial.needle).toMatch(/^-?\d+(?:\.\d+)?deg$/);
 
-  await page.keyboard.down("q");
-  try {
-    await expect
-      .poll(async () => Math.abs((await readDirectionSnapshot(page)).direction), {
-        timeout: 8_000,
-      })
-      .toBeGreaterThan(0.1);
-  } finally {
-    await page.keyboard.up("q");
-  }
+  const degreesApart = (left: number, right: number): number => {
+    const delta = Math.abs(left - right) % 360;
+    return Math.min(delta, 360 - delta);
+  };
+
+  await expect
+    .poll(
+      async () =>
+        degreesApart(
+          (await readDirectionSnapshot(page)).direction,
+          initial.direction,
+        ),
+      { timeout: 40_000 },
+    )
+    .toBeGreaterThan(0.1);
 
   const snapshot = await readDirectionSnapshot(page);
   expect(Number.isFinite(snapshot.direction)).toBe(true);
-  expect(Math.abs(snapshot.direction)).toBeGreaterThan(0.1);
   expect(snapshot.direction).toBeGreaterThanOrEqual(-180);
   expect(snapshot.direction).toBeLessThanOrEqual(180);
   expect(snapshot.needle).toMatch(/^-?\d+(?:\.\d+)?deg$/);
 
   const needleDegrees = Number.parseFloat(snapshot.needle);
-  const initialNeedleDegrees = Number.parseFloat(stationary.needle);
+  const initialNeedleDegrees = Number.parseFloat(initial.needle);
   expect(Number.isFinite(needleDegrees)).toBe(true);
   expect(Number.isFinite(initialNeedleDegrees)).toBe(true);
   expect(needleDegrees).not.toBe(initialNeedleDegrees);
-  expect(Math.abs(needleDegrees)).toBeGreaterThan(0.1);
 });
 
 test("distance and velocity sensor blocks show numeric values", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   const numericValue = /[-+]?(?:\d+(?:\.\d*)?|\.\d+)/;
   for (const testId of [
@@ -766,8 +870,9 @@ test("distance and velocity sensor blocks show numeric values", async ({ page })
   }
 });
 
-test("distance and velocity sensors update from ship motion", async ({ page }) => {
+test("distance and velocity sensors update from autopilot ship motion", async ({ page }) => {
   await page.goto("./");
+  await enableAutopilot(page);
 
   const initial = await readSensorSnapshot(page);
   expect(Number.isFinite(initial.distance)).toBe(true);
@@ -775,9 +880,8 @@ test("distance and velocity sensors update from ship motion", async ({ page }) =
   expect(Number.isFinite(initial.speed)).toBe(true);
   expect(initial.speed).toBeGreaterThanOrEqual(0);
 
-  await page.keyboard.press("Space");
   await expect
-    .poll(async () => (await readSensorSnapshot(page)).speed, { timeout: 8_000 })
+    .poll(async () => (await readSensorSnapshot(page)).speed, { timeout: 10_000 })
     .toBeGreaterThan(initial.speed + 0.1);
 
   const snapshot = await readSensorSnapshot(page);
@@ -923,6 +1027,254 @@ test("autopilot mode persists across R while progress restarts", async ({ page }
     .toBeGreaterThan(0);
 });
 
+test("manual mode hides the whole sensor console and radar, and E toggles them", async ({ page }) => {
+  await page.goto("./");
+
+  await expect(page.getByTestId("autopilot-status")).toHaveAttribute(
+    "data-active",
+    "false",
+  );
+  await expectSensorConsoleHidden(page);
+
+  await page.keyboard.press("e");
+  await expect(page.getByTestId("autopilot-status")).toHaveAttribute(
+    "data-active",
+    "true",
+  );
+  await expectSensorConsoleVisible(page);
+  await expect(page.getByTestId("eye-sensor-radius")).toBeVisible();
+
+  await page.keyboard.press("e");
+  await expect(page.getByTestId("autopilot-status")).toHaveAttribute(
+    "data-active",
+    "false",
+  );
+  await expectSensorConsoleHidden(page);
+});
+
+test("revealing the hidden sensor console draws its chart at a real size", async ({ page }) => {
+  await page.goto("./");
+  await expectSensorConsoleHidden(page);
+
+  const chart = page.getByTestId("eye-sensor-chart");
+  expect(await chart.evaluate((element) => element.clientWidth)).toBe(0);
+  expect(await chart.evaluate((element) => element.clientHeight)).toBe(0);
+
+  await enableAutopilot(page);
+
+  const metrics = await chart.evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    return {
+      clientWidth: canvas.clientWidth,
+      clientHeight: canvas.clientHeight,
+      width: canvas.width,
+      height: canvas.height,
+    };
+  });
+  expect(metrics.clientWidth).toBeGreaterThan(0);
+  expect(metrics.clientHeight).toBeGreaterThan(0);
+  expect(metrics.width).toBeGreaterThan(1);
+  expect(metrics.height).toBeGreaterThan(1);
+  expect(await hasNonBackgroundPixels(chart)).toBe(true);
+
+  const panel = page.getByTestId("eye-sensor-panel");
+  await expect(panel).toBeVisible();
+  await expectInsideViewport(page, panel);
+});
+
+test("sensor visibility follows autopilot mode across R and seed loads", async ({ page }) => {
+  await page.goto("./");
+
+  const seedDisplay = page.getByTestId("seed-display");
+  const seedInput = page.getByTestId("seed-input");
+  const seedLoad = page.getByTestId("seed-load");
+  const autopilotStatus = page.getByTestId("autopilot-status");
+
+  const seedBefore = await readSeed(page);
+  await page.keyboard.press("r");
+  expect(await readSeed(page)).not.toBe(seedBefore);
+  await expectSensorConsoleHidden(page);
+
+  await seedInput.fill("42");
+  await seedLoad.click();
+  await expect(seedDisplay).toHaveText("42");
+  await expectSensorConsoleHidden(page);
+
+  await enableAutopilot(page);
+  const autopilotSeedBefore = await readSeed(page);
+  await page.keyboard.press("r");
+  expect(await readSeed(page)).not.toBe(autopilotSeedBefore);
+  await expect(autopilotStatus).toHaveAttribute("data-active", "true");
+  await expectSensorConsoleVisible(page);
+
+  await seedInput.fill("7");
+  await seedLoad.click();
+  await expect(seedDisplay).toHaveText("7");
+  await expect(autopilotStatus).toHaveAttribute("data-active", "true");
+  await expectSensorConsoleVisible(page);
+});
+
+test("build info exposes the documented label and attributes", async ({ page }) => {
+  await page.goto("./");
+
+  const buildInfo = page.getByTestId("build-info");
+  await expect(buildInfo).toBeVisible();
+
+  const snapshot = await readBuildInfo(page);
+  expect(snapshot.number).not.toBeNull();
+  expect(snapshot.sha).not.toBeNull();
+  expect(snapshot.time).not.toBeNull();
+  expect(snapshot.source).not.toBeNull();
+
+  expect(snapshot.source).toMatch(/^(ci|local)$/);
+  expect(snapshot.number).toMatch(
+    snapshot.source === "ci" ? /^\d+$/ : /^DEV$/,
+  );
+  expect(snapshot.sha).toMatch(/^(?:[0-9a-f]{7}|unknown)$/);
+  expect(snapshot.time).toMatch(
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$/,
+  );
+  expect(snapshot.text).toBe(
+    `BUILD ${snapshot.number} · ${snapshot.sha} · ${snapshot.time}`,
+  );
+  await expect(buildInfo).toContainText(
+    `BUILD ${snapshot.number} · ${snapshot.sha} · ${snapshot.time}`,
+  );
+});
+
+test("Change Log modal lists every curated entry newest first and expands entries", async ({ page }) => {
+  test.setTimeout(45_000);
+
+  const curated = readCuratedChangelog();
+  expect(curated.length).toBeGreaterThan(0);
+
+  await page.goto("./");
+
+  const button = page.getByTestId("changelog-button");
+  const dialog = page.getByTestId("changelog-dialog");
+  const list = page.getByTestId("changelog-list");
+  const entries = page.getByTestId("changelog-entry");
+
+  await expect(button).toBeVisible();
+  await expect(button).toContainText(/change log/i);
+  await expect(dialog).toBeHidden();
+
+  await button.click();
+  await expect(dialog).toBeVisible();
+  await expect(entries).toHaveCount(curated.length);
+
+  const dates = await entries.locator(".changelog-entry-date").allInnerTexts();
+  const titles = await entries.locator(".changelog-entry-title").allInnerTexts();
+  expect(dates.map((value) => value.trim())).toEqual(
+    curated.map((entry) => entry.date),
+  );
+  expect(titles.map((value) => value.trim())).toEqual(
+    curated.map((entry) => entry.title),
+  );
+
+  await expect(entries.first()).toHaveAttribute("data-expanded", "true");
+  await expect(entries.first().locator("summary")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(entries.nth(1)).toHaveAttribute("data-expanded", "false");
+
+  await entries.nth(1).locator("summary").click();
+  await expect(entries.nth(1)).toHaveAttribute("data-expanded", "true");
+  await expect(entries.nth(1).locator("summary")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+
+  await entries.first().locator("summary").click();
+  await expect(entries.first()).toHaveAttribute("data-expanded", "false");
+  await expect(entries.first().locator("summary")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+
+  const scroll = await list.evaluate((element) => ({
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
+  }));
+  expect(scroll.scrollHeight).toBeGreaterThanOrEqual(scroll.clientHeight);
+  expect(scroll.overflowY).toBe("auto");
+});
+
+test("Change Log closes by button, Escape, and outside click with focus return", async ({ page }) => {
+  await page.goto("./");
+
+  const button = page.getByTestId("changelog-button");
+  const dialog = page.getByTestId("changelog-dialog");
+  const close = page.getByTestId("changelog-close");
+
+  const closeCases: (() => Promise<void>)[] = [
+    async () => {
+      await close.click();
+    },
+    async () => {
+      await page.keyboard.press("Escape");
+    },
+    async () => {
+      await page.mouse.click(4, 4);
+    },
+  ];
+
+  for (const closeDialog of closeCases) {
+    await button.click();
+    await expect(dialog).toBeVisible();
+    await closeDialog();
+    await expect(dialog).toBeHidden();
+    await expect(button).toBeFocused();
+  }
+});
+
+test("game keys are ignored while the Change Log modal is open", async ({ page }) => {
+  await page.goto("./");
+
+  const button = page.getByTestId("changelog-button");
+  const dialog = page.getByTestId("changelog-dialog");
+  const list = page.getByTestId("changelog-list");
+  const autopilotStatus = page.getByTestId("autopilot-status");
+  const seedBefore = await readSeed(page);
+
+  await button.click();
+  await expect(dialog).toBeVisible();
+  await list.focus();
+  await expect(list).toBeFocused();
+
+  await page.keyboard.down("q");
+  await page.keyboard.down("w");
+  await page.keyboard.press("Space");
+  await page.keyboard.press("e");
+  await page.keyboard.press("r");
+  await page.keyboard.up("q");
+  await page.keyboard.up("w");
+
+  await expect(autopilotStatus).toHaveAttribute("data-active", "false");
+  await expect(page.getByTestId("thruster-left")).toHaveAttribute(
+    "data-active",
+    "false",
+  );
+  await expect(page.getByTestId("thruster-right")).toHaveAttribute(
+    "data-active",
+    "false",
+  );
+  await expect(page.getByTestId("thruster-rear")).toHaveAttribute(
+    "data-active",
+    "false",
+  );
+  expect(await readSeed(page)).toBe(seedBefore);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(button).toBeFocused();
+
+  await page.keyboard.press("r");
+  expect(await readSeed(page)).not.toBe(seedBefore);
+});
+
 test("progress increases while holding Q", async ({ page }) => {
   await page.goto("./");
 
@@ -1034,12 +1386,17 @@ test("destruction shows the outcome overlay with the final score and R restarts"
   expect(runtimeErrors).toEqual([]);
 });
 
-test("desktop layout keeps the canvas and controls visible without overlap", async ({ page }) => {
+test("desktop layout has no overflow with the console hidden or visible", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("./");
 
   const canvas = page.getByTestId("game-canvas");
+  const instructions = page.getByTestId("instructions");
+  const panel = page.getByTestId("eye-sensor-panel");
+
   await expect(canvas).toBeVisible();
+  await expectSensorConsoleHidden(page);
+  await expectNoHorizontalOverflow(page);
 
   const mainBox = await page.locator("main.game").boundingBox();
   const canvasBox = await canvas.boundingBox();
@@ -1063,6 +1420,37 @@ test("desktop layout keeps the canvas and controls visible without overlap", asy
     "seed-display",
     "seed-input",
     "seed-load",
+    "build-info",
+    "changelog-button",
+    "instructions",
+  ]) {
+    const locator = page.getByTestId(testId);
+    await expect(locator).toBeVisible();
+    await expectInsideViewport(page, locator);
+  }
+
+  const hiddenInstructionsMaxWidth = await instructions.evaluate(
+    (element) => getComputedStyle(element).maxWidth,
+  );
+  expect(hiddenInstructionsMaxWidth).toBe("none");
+
+  await enableAutopilot(page);
+  await expectNoHorizontalOverflow(page);
+
+  for (const testId of [
+    "hud-hull",
+    "hud-speed",
+    "hud-progress",
+    "hud-score",
+    "thruster-left",
+    "thruster-right",
+    "thruster-rear",
+    "autopilot-status",
+    "seed-display",
+    "seed-input",
+    "seed-load",
+    "build-info",
+    "changelog-button",
     "instructions",
     "eye-sensor-panel",
   ]) {
@@ -1071,8 +1459,13 @@ test("desktop layout keeps the canvas and controls visible without overlap", asy
     await expectInsideViewport(page, locator);
   }
 
-  const instructionsBox = await page.getByTestId("instructions").boundingBox();
-  const consoleBox = await page.getByTestId("eye-sensor-panel").boundingBox();
+  const visibleInstructionsMaxWidth = await instructions.evaluate(
+    (element) => getComputedStyle(element).maxWidth,
+  );
+  expect(visibleInstructionsMaxWidth).not.toBe(hiddenInstructionsMaxWidth);
+
+  const instructionsBox = await instructions.boundingBox();
+  const consoleBox = await panel.boundingBox();
   expect(instructionsBox).not.toBeNull();
   expect(consoleBox).not.toBeNull();
 
@@ -1081,12 +1474,17 @@ test("desktop layout keeps the canvas and controls visible without overlap", asy
   }
 });
 
-test("narrow layout keeps the canvas and controls visible", async ({ page }) => {
+test("narrow layout has no overflow with the console hidden or visible", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("./");
 
   const canvas = page.getByTestId("game-canvas");
+  const instructions = page.getByTestId("instructions");
+  const panel = page.getByTestId("eye-sensor-panel");
+
   await expect(canvas).toBeVisible();
+  await expectSensorConsoleHidden(page);
+  await expectNoHorizontalOverflow(page);
 
   const canvasBox = await canvas.boundingBox();
   expect(canvasBox).not.toBeNull();
@@ -1109,6 +1507,37 @@ test("narrow layout keeps the canvas and controls visible", async ({ page }) => 
     "seed-display",
     "seed-input",
     "seed-load",
+    "build-info",
+    "changelog-button",
+    "instructions",
+  ]) {
+    const locator = page.getByTestId(testId);
+    await expect(locator).toBeVisible();
+    await expectInsideViewport(page, locator);
+  }
+
+  const hiddenInstructionsMaxWidth = await instructions.evaluate(
+    (element) => getComputedStyle(element).maxWidth,
+  );
+  expect(hiddenInstructionsMaxWidth).toBe("none");
+
+  await enableAutopilot(page);
+  await expectNoHorizontalOverflow(page);
+
+  for (const testId of [
+    "hud-hull",
+    "hud-speed",
+    "hud-progress",
+    "hud-score",
+    "thruster-left",
+    "thruster-right",
+    "thruster-rear",
+    "autopilot-status",
+    "seed-display",
+    "seed-input",
+    "seed-load",
+    "build-info",
+    "changelog-button",
     "instructions",
     "eye-sensor-panel",
   ]) {
@@ -1117,11 +1546,17 @@ test("narrow layout keeps the canvas and controls visible", async ({ page }) => 
     await expectInsideViewport(page, locator);
   }
 
-  const documentWidths = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    clientWidth: document.documentElement.clientWidth,
-  }));
-  expect(documentWidths.scrollWidth).toBeLessThanOrEqual(
-    documentWidths.clientWidth + 1,
+  const visibleInstructionsMaxWidth = await instructions.evaluate(
+    (element) => getComputedStyle(element).maxWidth,
   );
+  expect(visibleInstructionsMaxWidth).not.toBe(hiddenInstructionsMaxWidth);
+
+  const instructionsBox = await instructions.boundingBox();
+  const consoleBox = await panel.boundingBox();
+  expect(instructionsBox).not.toBeNull();
+  expect(consoleBox).not.toBeNull();
+
+  if (instructionsBox !== null && consoleBox !== null) {
+    expect(rectsOverlap(instructionsBox, consoleBox)).toBe(false);
+  }
 });

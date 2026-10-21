@@ -4,6 +4,7 @@ export interface InputOptions {
   onRestart(): void;
   onToggleAutopilot(): void;
   isAutopilotActive(): boolean;
+  isModalOpen?(): boolean;
 }
 
 export interface InputController {
@@ -132,6 +133,10 @@ export function createInput(options: InputOptions): InputController {
   };
 
   const handleKeyDown = (event: KeyboardEvent): void => {
+    if (options.isModalOpen?.() === true) {
+      return;
+    }
+
     if (isEditableTarget(event.target)) {
       return;
     }

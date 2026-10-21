@@ -28,6 +28,8 @@ export interface SensorConsoleOptions {
 export interface SensorConsoleController {
   update(state: SimState): void;
   resize(): void;
+  setVisible(visible: boolean): void;
+  isVisible(): boolean;
 }
 
 export interface SensorConsoleValues {
@@ -140,6 +142,20 @@ function setOutput(
 ): void {
   element.textContent = text;
   element.setAttribute("data-value", String(value));
+}
+
+function queryOptionalElement<T extends Element>(
+  selector: string,
+): T | null {
+  if (
+    typeof document === "undefined" ||
+    typeof document.querySelector !== "function"
+  ) {
+    return null;
+  }
+
+  const element = document.querySelector(selector);
+  return element === null ? null : (element as T);
 }
 
 function eyeChartPoints(
@@ -309,6 +325,15 @@ export function createSensorConsole(
   const velocityVx = getHudElement("velocity-vx");
   const velocityVy = getHudElement("velocity-vy");
   const velocityAngle = getHudElement("velocity-angle");
+  const panel = queryOptionalElement<HTMLElement>(
+    '[data-testid="eye-sensor-panel"]',
+  );
+  const gameCanvas = queryOptionalElement<HTMLElement>(
+    '[data-testid="game-canvas"]',
+  );
+  const autopilotStatus = queryOptionalElement<HTMLElement>(
+    '[data-testid="autopilot-status"]',
+  );
 
   slider.min = String(EYE_SENSOR_VIEW_MIN);
   slider.max = String(EYE_SENSOR_VIEW_MAX);
@@ -322,6 +347,58 @@ export function createSensorConsole(
   let lastChartWidth = -1;
   let lastChartHeight = -1;
   let lastChartDpr = -1;
+  let visibleState: boolean | null = null;
+
+  const setVisuallyHidden = (visible: boolean): void => {
+    if (panel !== null) {
+      const panelWithState = panel as HTMLElement & {
+        hidden?: boolean;
+        inert?: boolean;
+      };
+
+      panelWithState.hidden = !visible;
+      panelWithState.inert = !visible;
+
+      if (visible) {
+        panel.removeAttribute("hidden");
+        panel.removeAttribute("inert");
+      } else {
+        panel.setAttribute("hidden", "");
+        panel.setAttribute("inert", "");
+      }
+
+      panel.setAttribute("aria-hidden", String(!visible));
+      panel.setAttribute("data-visible", String(visible));
+    }
+
+    slider.disabled = !visible;
+
+    if (typeof document !== "undefined") {
+      document.body?.classList?.toggle("sensors-hidden", !visible);
+    }
+  };
+
+  const moveFocusOut = (): void => {
+    if (panel === null || typeof document === "undefined") {
+      return;
+    }
+
+    const active = document.activeElement;
+    const insidePanel =
+      active !== null &&
+      (typeof panel.contains === "function"
+        ? panel.contains(active)
+        : active === panel || active === slider);
+
+    if (!insidePanel) {
+      return;
+    }
+
+    const target = autopilotStatus ?? gameCanvas;
+    if (target !== null && typeof target.focus === "function") {
+      target.focus();
+    }
+  };
 
   const setRadiusReadout = (radius: number): void => {
     const clamped = clampEyeSensorView(radius);
@@ -416,6 +493,29 @@ export function createSensorConsole(
 
     resize(): void {
       drawCurrentReading();
+    },
+
+    setVisible(visible: boolean): void {
+      const next = Boolean(visible);
+      const wasVisible = visibleState;
+
+      if (wasVisible === true && !next) {
+        moveFocusOut();
+      }
+
+      setVisuallyHidden(next);
+      visibleState = next;
+
+      if (next && wasVisible !== true) {
+        lastChartWidth = -1;
+        lastChartHeight = -1;
+        lastChartDpr = -1;
+        drawCurrentReading();
+      }
+    },
+
+    isVisible(): boolean {
+      return visibleState === true;
     },
   };
 }

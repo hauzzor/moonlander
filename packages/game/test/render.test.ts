@@ -349,6 +349,13 @@ const EXPECTED_HOOKS = [
   "thruster-right",
   "thruster-rear",
   "autopilot-status",
+  "radar-status",
+  "build-info",
+  "changelog-button",
+  "changelog-dialog",
+  "changelog-close",
+  "changelog-list",
+  "changelog-data",
   "instructions",
   "outcome",
   "seed-display",
@@ -395,6 +402,31 @@ describe("static page hooks", () => {
     "hud-fuel",
   ])("does not keep the stale landing hook %s", (testId) => {
     expect(html).not.toContain(`data-testid="${testId}"`);
+  });
+
+  it.each([
+    "__BUILD_NUMBER__",
+    "__BUILD_SHA__",
+    "__BUILD_TIME__",
+    "__BUILD_SOURCE__",
+    "__CHANGELOG_JSON__",
+  ])("keeps the build-time placeholder %s", (placeholder) => {
+    expect(html).toContain(placeholder);
+  });
+
+  it("starts with the sensor console hidden and marked inert", () => {
+    const panel = /<aside[^>]*data-testid="eye-sensor-panel"[^>]*>/.exec(html);
+
+    expect(panel).not.toBeNull();
+    expect(panel![0]).toContain('data-visible="false"');
+    expect(panel![0]).toContain('aria-hidden="true"');
+    expect(panel![0]).toMatch(/\shidden(?:\s|>)/);
+    expect(panel![0]).toMatch(/\sinert(?:\s|>)/);
+  });
+
+  it("provides a native modal dialog for the changelog", () => {
+    expect(html).toMatch(/<dialog[^>]*data-testid="changelog-dialog"/);
+    expect(html).toMatch(/<div[^>]*data-testid="changelog-list"/);
   });
 });
 

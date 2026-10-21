@@ -61,13 +61,19 @@ test("the page plays without uncaught page errors or console errors", async ({ p
   await page.keyboard.press("Space");
   await page.keyboard.press("e");
   await page.waitForTimeout(250);
-  await page.keyboard.press("e");
-  await page.keyboard.press("r");
 
   const slider = page.getByTestId("eye-sensor-radius");
+  await expect(slider).toBeVisible();
   await slider.focus();
   await slider.press("Home");
   await slider.press("End");
+
+  await page.keyboard.press("e");
+  await expect(page.getByTestId("autopilot-status")).toHaveAttribute(
+    "data-active",
+    "false",
+  );
+  await page.keyboard.press("r");
 
   const seedInput = page.getByTestId("seed-input");
   await seedInput.fill("42");

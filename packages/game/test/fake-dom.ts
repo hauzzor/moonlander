@@ -122,16 +122,63 @@ export class FakeElement extends FakeEventTarget {
   readonly classList = new FakeClassList();
   readonly children: FakeElement[] = [];
   readonly style = new FakeStyle();
-  textContent = "";
   value = "";
   isContentEditable = false;
+  disabled = false;
   clientWidth = 0;
   clientHeight = 0;
   width = 0;
   height = 0;
+  private text = "";
 
   constructor(readonly tagName: string) {
     super();
+  }
+
+  get textContent(): string {
+    if (this.text.length > 0) {
+      return this.text;
+    }
+    return this.children.map((child) => child.textContent).join("");
+  }
+
+  set textContent(value: string) {
+    this.text = String(value);
+    this.children.length = 0;
+  }
+
+  get className(): string {
+    return this.classList.values().join(" ");
+  }
+
+  set className(value: string) {
+    for (const token of this.classList.values()) {
+      this.classList.remove(token);
+    }
+    for (const token of String(value).split(/\s+/)) {
+      if (token.length > 0) {
+        this.classList.add(token);
+      }
+    }
+  }
+
+  focus(): void {
+    const root = (globalThis as unknown as { document?: FakeDocument }).document;
+    if (root !== undefined) {
+      root.activeElement = this;
+    }
+  }
+
+  contains(node: unknown): boolean {
+    if (node === this) {
+      return true;
+    }
+    for (const child of this.children) {
+      if (child.contains(node)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   setAttribute(name: string, value: string): void {
@@ -341,12 +388,37 @@ export class FakeCanvasElement extends FakeElement {
   }
 }
 
+export class FakeDialogElement extends FakeElement {
+  open = false;
+
+  constructor(tagName = "dialog") {
+    super(tagName);
+  }
+
+  showModal(): void {
+    this.open = true;
+    this.setAttribute("open", "");
+  }
+
+  show(): void {
+    this.showModal();
+  }
+
+  close(): void {
+    this.open = false;
+    this.removeAttribute("open");
+    this.dispatch("close");
+  }
+}
+
 export class FakeWindow extends FakeEventTarget {
   devicePixelRatio = 1;
 }
 
 export class FakeDocument extends FakeEventTarget {
   hidden = false;
+  activeElement: FakeElement | null = null;
+  readonly body = new FakeElement("body");
   private readonly registry = new Map<string, FakeElement>();
 
   register(testId: string, element: FakeElement): void {
@@ -357,12 +429,29 @@ export class FakeDocument extends FakeEventTarget {
     return this.registry.get(testId);
   }
 
+  createElement(tagName: string): FakeElement {
+    return tagName.toLowerCase() === "dialog"
+      ? new FakeDialogElement()
+      : new FakeElement(tagName);
+  }
+
   querySelector(selector: string): FakeElement | null {
     const testId = /^\[data-testid="([^"]+)"\]$/.exec(selector);
-    if (testId === null) {
-      return null;
+    if (testId !== null) {
+      return this.registry.get(testId[1]!) ?? null;
     }
-    return this.registry.get(testId[1]!) ?? null;
+
+    if (selector.startsWith("#")) {
+      const id = selector.slice(1);
+      for (const element of this.registry.values()) {
+        if (element.getAttribute("id") === id) {
+          return element;
+        }
+      }
+      return this.body.querySelector(selector);
+    }
+
+    return this.body.querySelector(selector);
   }
 }
 
@@ -380,6 +469,7 @@ export interface FakeDom {
   addElement(testId: string, tagName?: string): FakeElement;
   addInput(testId: string): FakeHTMLInputElement;
   addCanvas(testId: string): FakeCanvasElement;
+  addDialog(testId: string): FakeDialogElement;
   restore(): void;
 }
 
@@ -438,6 +528,11 @@ export function installFakeDom(options: FakeDomOptions = {}): FakeDom {
     },
     addCanvas(testId: string): FakeCanvasElement {
       const element = new FakeCanvasElement();
+      register(testId, element);
+      return element;
+    },
+    addDialog(testId: string): FakeDialogElement {
+      const element = new FakeDialogElement();
       register(testId, element);
       return element;
     },

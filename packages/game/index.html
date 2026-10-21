@@ -6,12 +6,34 @@
     <meta name="theme-color" content="#080a14" />
     <title>Moonlander — Starship Course</title>
   </head>
-  <body>
+  <body class="sensors-hidden">
     <div id="app">
       <header class="topbar">
         <div class="brand">
           <h1>Moonlander</h1>
           <p class="subtitle">Starship Course</p>
+        </div>
+        <div class="topbar-meta">
+          <span
+            class="build-info"
+            data-testid="build-info"
+            data-build-number="__BUILD_NUMBER__"
+            data-build-sha="__BUILD_SHA__"
+            data-build-time="__BUILD_TIME__"
+            data-build-source="__BUILD_SOURCE__"
+          >
+            BUILD __BUILD_NUMBER__ &middot; __BUILD_SHA__ &middot; __BUILD_TIME__
+          </span>
+          <button
+            class="changelog-button"
+            data-testid="changelog-button"
+            id="changelog-button"
+            type="button"
+            aria-haspopup="dialog"
+            aria-controls="changelog-dialog"
+          >
+            CHANGE LOG
+          </button>
         </div>
       </header>
       <main class="game">
@@ -61,10 +83,16 @@
               class="hud-item autopilot-status"
               data-testid="autopilot-status"
               data-active="false"
+              tabindex="-1"
             >
               <span class="hud-label">PILOT</span>
               <span class="autopilot-value">MANUAL</span>
             </div>
+            <span
+              class="visually-hidden"
+              data-testid="radar-status"
+              data-active="false"
+            ></span>
           </div>
           <div class="seed-panel" role="group" aria-label="Course seed">
             <div class="seed-heading">
@@ -126,7 +154,11 @@
         <aside
           class="sensor-console"
           data-testid="eye-sensor-panel"
+          data-visible="false"
           aria-label="Ship sensor console"
+          aria-hidden="true"
+          inert
+          hidden
         >
           <section class="eye-sensor-block" aria-label="Eye sensor">
             <div class="sensor-console-header">
@@ -232,6 +264,41 @@
         </div>
       </main>
     </div>
+
+    <dialog
+      class="changelog-dialog"
+      data-testid="changelog-dialog"
+      id="changelog-dialog"
+      aria-labelledby="changelog-title"
+    >
+      <div class="changelog-card">
+        <header class="changelog-header">
+          <h2 class="changelog-title" id="changelog-title">CHANGE LOG</h2>
+          <button
+            class="changelog-close"
+            data-testid="changelog-close"
+            id="changelog-close"
+            type="button"
+            aria-label="Close change log"
+          >
+            CLOSE
+          </button>
+        </header>
+        <div
+          class="changelog-list"
+          data-testid="changelog-list"
+          id="changelog-list"
+          tabindex="0"
+        ></div>
+      </div>
+    </dialog>
+    <script
+      id="changelog-data"
+      data-testid="changelog-data"
+      type="application/json"
+    >
+      __CHANGELOG_JSON__
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

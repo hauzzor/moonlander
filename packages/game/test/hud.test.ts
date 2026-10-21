@@ -27,6 +27,7 @@ interface HudFixture {
   thrusterRear: FakeElement;
   autopilot: FakeElement;
   autopilotValue: FakeElement;
+  radarStatus: FakeElement;
   seedDisplay: FakeElement;
   outcome: FakeElement;
   outcomeText: FakeElement;
@@ -60,6 +61,7 @@ function installHudFixture(): HudFixture {
 
   const autopilot = dom.addElement("autopilot-status");
   const autopilotValue = addClassedChild(autopilot, "autopilot-value");
+  const radarStatus = dom.addElement("radar-status");
 
   const seedDisplay = dom.addElement("seed-display");
 
@@ -84,6 +86,7 @@ function installHudFixture(): HudFixture {
     thrusterRear,
     autopilot,
     autopilotValue,
+    radarStatus,
     seedDisplay,
     outcome,
     outcomeText,
@@ -310,6 +313,24 @@ describe("HUD formatting", () => {
       expect(fixture.autopilotValue.textContent).toBe(expectedText);
     },
   );
+
+  it.each([
+    { name: "manual", active: false, expected: "false" },
+    { name: "autopilot", active: true, expected: "true" },
+  ])(
+    "reports the radar status as $expected while $name",
+    ({ active, expected }) => {
+      hud.update(makeState(), active);
+
+      expect(fixture.radarStatus.getAttribute("data-active")).toBe(expected);
+    },
+  );
+
+  it("keeps the radar status off while destroyed in manual mode", () => {
+    hud.update(makeState({ hull: 0, outcome: "destroyed" }), false);
+
+    expect(fixture.radarStatus.getAttribute("data-active")).toBe("false");
+  });
 
   it("adds the critical hull class at or below 30 hull points", () => {
     hud.update(makeState({ hull: 30.1 }), false);

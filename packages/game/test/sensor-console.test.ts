@@ -52,6 +52,8 @@ function uniformDistances(length: number, radius: number): number[] {
 interface ConsoleFixture {
   dom: FakeDom;
   console: SensorConsoleController;
+  panel: FakeElement;
+  autopilotStatus: FakeElement;
   chart: FakeCanvasElement;
   slider: FakeHTMLInputElement;
   radiusValue: FakeElement;
@@ -74,10 +76,14 @@ function createConsole(
   const dom = installFakeDom({ dpr: 1 });
   activeDom = dom;
 
+  const panel = dom.addElement("eye-sensor-panel", "aside");
+  const autopilotStatus = dom.addElement("autopilot-status", "div");
   const chart = dom.addCanvas("eye-sensor-chart");
   chart.clientWidth = 374;
   chart.clientHeight = 138;
+  panel.appendChild(chart);
   const slider = dom.addInput("eye-sensor-radius");
+  panel.appendChild(slider);
   const radiusValue = dom.addElement("eye-sensor-radius-value");
   const scanTick = dom.addElement("eye-sensor-scan-tick");
   const needle = dom.addElement("direction-needle");
@@ -100,6 +106,8 @@ function createConsole(
   return {
     dom,
     console: controller,
+    panel,
+    autopilotStatus,
     chart,
     slider,
     radiusValue,
@@ -666,6 +674,135 @@ describe("sensor console edge cases", () => {
     fixture.console.update(state);
 
     expect(state).toEqual(snapshot);
+  });
+});
+
+describe("sensor console visibility", () => {
+  it("hides the whole panel, disables the slider, and marks the document", () => {
+    const fixture = createConsole();
+
+    fixture.console.setVisible(false);
+
+    expect(fixture.console.isVisible()).toBe(false);
+    expect(fixture.panel.getAttribute("data-visible")).toBe("false");
+    expect(fixture.panel.getAttribute("aria-hidden")).toBe("true");
+    expect(fixture.panel.hasAttribute("hidden")).toBe(true);
+    expect(fixture.panel.hasAttribute("inert")).toBe(true);
+    expect(fixture.slider.disabled).toBe(true);
+    expect(fixture.dom.document.body.classList.contains("sensors-hidden")).toBe(
+      true,
+    );
+  });
+
+  it("reveals the panel, removes the hidden state, and enables the slider", () => {
+    const fixture = createConsole();
+    fixture.console.setVisible(false);
+
+    fixture.console.setVisible(true);
+
+    expect(fixture.console.isVisible()).toBe(true);
+    expect(fixture.panel.getAttribute("data-visible")).toBe("true");
+    expect(fixture.panel.getAttribute("aria-hidden")).toBe("false");
+    expect(fixture.panel.hasAttribute("hidden")).toBe(false);
+    expect(fixture.panel.hasAttribute("inert")).toBe(false);
+    expect(fixture.slider.disabled).toBe(false);
+    expect(fixture.dom.document.body.classList.contains("sensors-hidden")).toBe(
+      false,
+    );
+  });
+
+  it.each([false, true])(
+    "keeps updating hidden and visible console values (visible=%s)",
+    (visible) => {
+      const fixture = createConsole();
+      fixture.console.setVisible(visible);
+
+      fixture.console.update(
+        withEye(
+          makeState({
+            tick: 120,
+            position: { x: 30, y: 100 },
+            velocity: { x: 3, y: 4 },
+            angle: Math.PI / 4,
+            eyeSensorRadius: 180,
+          }),
+          { radius: 180, tick: 120 },
+        ),
+      );
+
+      expect(fixture.chart.getAttribute("data-scan-tick")).toBe("120");
+      expect(fixture.chart.getAttribute("data-scan-radius")).toBe("180");
+      expect(fixture.scanTick.textContent).toBe("120");
+      expect(fixture.radiusValue.textContent).toBe("180 m");
+      expect(fixture.slider.value).toBe("180");
+      expect(fixture.distanceToStart.textContent).toBe("50.0 m");
+      expect(numericValue(fixture.speed)).toBeCloseTo(5, 9);
+      expect(numericValue(fixture.directionValue)).toBeCloseTo(45, 9);
+    },
+  );
+
+  it("does not mutate a frozen state while hidden", () => {
+    const fixture = createConsole();
+    fixture.console.setVisible(false);
+    const state = deepFreeze(
+      withEye(makeState({ tick: 240, velocity: { x: 2, y: -1 } }), {
+        radius: 120,
+        tick: 240,
+      }),
+    );
+    const snapshot = structuredClone(state);
+
+    fixture.console.update(state);
+
+    expect(state).toEqual(snapshot);
+    expect(fixture.chart.getAttribute("data-scan-tick")).toBe("240");
+  });
+
+  it("redraws the last reading at its real size when revealed", () => {
+    const fixture = createConsole();
+    fixture.console.setVisible(false);
+    fixture.chart.clientWidth = 0;
+    fixture.chart.clientHeight = 0;
+    fixture.console.update(
+      withEye(makeState({ eyeSensorRadius: 120 }), { radius: 120, tick: 0 }),
+    );
+
+    fixture.chart.clientWidth = 374;
+    fixture.chart.clientHeight = 138;
+    const beforeReveal = fixture.chart.context.calls.length;
+
+    fixture.console.setVisible(true);
+
+    expect(fixture.chart.context.calls.length).toBeGreaterThan(beforeReveal);
+    expect(fixture.chart.width).toBe(374);
+    expect(fixture.chart.height).toBe(138);
+    expect(chartTrace(fixture.chart)).toHaveLength(EYE_SENSOR_RAY_COUNT);
+  });
+
+  it("moves focus out of the panel when it is hidden", () => {
+    const fixture = createConsole();
+    fixture.console.setVisible(true);
+    fixture.slider.focus();
+    expect(fixture.dom.document.activeElement).toBe(fixture.slider);
+
+    fixture.console.setVisible(false);
+
+    const active = fixture.dom.document.activeElement;
+    expect(active).not.toBe(fixture.slider);
+    expect(fixture.panel.contains(active)).toBe(false);
+    expect(
+      active === fixture.autopilotStatus || active === fixture.dom.canvas,
+    ).toBe(true);
+  });
+
+  it("leaves focus untouched when the panel was already hidden", () => {
+    const fixture = createConsole();
+    const outside = new FakeElement("button");
+    outside.focus();
+
+    fixture.console.setVisible(false);
+
+    expect(fixture.dom.document.activeElement).toBe(outside);
   });
 });
 

@@ -8,6 +8,10 @@ import {
   type Simulation,
 } from "@moonlander/sim";
 import { createCamera, snapCamera, updateCamera } from "./camera";
+import {
+  createChangelog,
+  type ChangelogController,
+} from "./changelog";
 import { createHud } from "./hud";
 import { createInput } from "./input";
 import { createRenderer } from "./render";
@@ -165,7 +169,13 @@ export function createGame(options: GameOptions = {}): Game {
 
   const camera = createCamera();
   const hud = createHud();
-  const renderer = createRenderer({ sensorRenderer: drawSensorOverlay });
+  const renderer = createRenderer({
+    sensorRenderer: (ctx, viewport, cameraView, state) => {
+      if (autopilotEnabled) {
+        drawSensorOverlay(ctx, viewport, cameraView, state);
+      }
+    },
+  });
   const sensorConsole = createSensorConsole({
     getEyeSensorRadius: () => simulation.getState().eyeSensorRadius,
     setEyeSensorRadius: (radius) => {
@@ -202,6 +212,7 @@ export function createGame(options: GameOptions = {}): Game {
     snapCamera(camera, state);
     hud.update(state, autopilotEnabled);
     sensorConsole.update(state);
+    sensorConsole.setVisible(autopilotEnabled);
     renderer.render(state, simulation.field, camera);
     lastTime = now();
   };
@@ -225,8 +236,10 @@ export function createGame(options: GameOptions = {}): Game {
       getAutopilot().reset?.();
     }
 
-    hud.update(simulation.getState(), autopilotEnabled);
-    renderer.render(simulation.getState(), simulation.field, camera);
+    const state = simulation.getState();
+    hud.update(state, autopilotEnabled);
+    sensorConsole.setVisible(autopilotEnabled);
+    renderer.render(state, simulation.field, camera);
   };
 
   const seedControls = createSeedControls({
@@ -234,10 +247,21 @@ export function createGame(options: GameOptions = {}): Game {
     onLoadSeed: loadSeed,
   });
 
+  let changelog: ChangelogController | null = null;
+
   const input = createInput({
     onRestart: restart,
     onToggleAutopilot: toggleAutopilot,
     isAutopilotActive: () => autopilotEnabled,
+    isModalOpen: () => changelog?.isOpen() ?? false,
+  });
+
+  changelog = createChangelog({
+    onOpenChange: (open) => {
+      if (open) {
+        input.release();
+      }
+    },
   });
 
   const stepOnce = (): void => {
@@ -324,6 +348,7 @@ export function createGame(options: GameOptions = {}): Game {
   seedControls.applySeed(currentSeed);
   snapCamera(camera, initialState);
   hud.update(initialState, autopilotEnabled);
+  sensorConsole.setVisible(autopilotEnabled);
   sensorConsole.update(initialState);
   renderer.render(initialState, simulation.field, camera);
   lastTime = now();
@@ -331,6 +356,7 @@ export function createGame(options: GameOptions = {}): Game {
   const dispose = (): void => {
     stop();
     window.removeEventListener("resize", handleResize);
+    changelog?.dispose();
   };
 
   return {
