@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SimState } from "@moonlander/sim";
+import { GRAVITY, type SimState } from "@moonlander/sim";
 import {
   CAMERA_RESPONSE,
   cameraTarget,
@@ -25,6 +25,10 @@ function makeState(
     score: 0,
     progress: 0,
       eyeSensorRadius: 120,
+      gravityScale: 1,
+      gravity: GRAVITY,
+      bottomThrusterScale: 1,
+      rearThrusterScale: 1,
       sensors: {
         eye: {
           radius: 120,

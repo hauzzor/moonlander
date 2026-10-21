@@ -1423,6 +1423,12 @@ test("desktop layout has no overflow with the console hidden or visible", async 
     "build-info",
     "changelog-button",
     "instructions",
+    "sim-panel",
+    "sim-panel-toggle",
+    "sim-speed",
+    "gravity-scale",
+    "bottom-power",
+    "rear-power",
   ]) {
     const locator = page.getByTestId(testId);
     await expect(locator).toBeVisible();
@@ -1452,6 +1458,12 @@ test("desktop layout has no overflow with the console hidden or visible", async 
     "build-info",
     "changelog-button",
     "instructions",
+    "sim-panel",
+    "sim-panel-toggle",
+    "sim-speed",
+    "gravity-scale",
+    "bottom-power",
+    "rear-power",
     "eye-sensor-panel",
   ]) {
     const locator = page.getByTestId(testId);
@@ -1510,6 +1522,12 @@ test("narrow layout has no overflow with the console hidden or visible", async (
     "build-info",
     "changelog-button",
     "instructions",
+    "sim-panel",
+    "sim-panel-toggle",
+    "sim-speed",
+    "gravity-scale",
+    "bottom-power",
+    "rear-power",
   ]) {
     const locator = page.getByTestId(testId);
     await expect(locator).toBeVisible();
@@ -1539,6 +1557,12 @@ test("narrow layout has no overflow with the console hidden or visible", async (
     "build-info",
     "changelog-button",
     "instructions",
+    "sim-panel",
+    "sim-panel-toggle",
+    "sim-speed",
+    "gravity-scale",
+    "bottom-power",
+    "rear-power",
     "eye-sensor-panel",
   ]) {
     const locator = page.getByTestId(testId);

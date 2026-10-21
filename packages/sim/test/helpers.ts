@@ -14,6 +14,16 @@ export { sim };
 export const noThrusters: Action = { left: false, right: false, rear: false };
 export const rearOnly: Action = { left: false, right: false, rear: true };
 export const bothThrusters: Action = { left: true, right: true, rear: false };
+export const allThrusters: Action = { left: true, right: true, rear: true };
+
+export function firstTickFallVelocity(gravityScale: number): number {
+  return (-sim.GRAVITY * gravityScale * sim.FIXED_DT) /
+    (1 + sim.LINEAR_DRAG * sim.FIXED_DT);
+}
+
+export function terminalFallVelocity(gravityScale: number): number {
+  return (-sim.GRAVITY * gravityScale) / sim.LINEAR_DRAG;
+}
 
 interface ControlledFieldOptions {
   seed?: number;

@@ -4,6 +4,15 @@ All notable Moonlander changes. Entry format: `## YYYY-MM-DD — Title` followed
 by `-` bullet summaries. The game's Change Log modal reads this file at build
 time; no runtime network request is used.
 
+## 2026-10-21 — Configurable simulation settings
+
+- Added 0.1x-10x simulation speed (game-loop time scale), gravity, and separate
+  bottom/rear thruster power.
+- Added a collapsible SIM panel with logarithmic sliders and URL/localStorage
+  persistence.
+- The autopilot uses effective gravity and power; the default benchmark is
+  unchanged.
+
 ## 2026-10-21 — Build info, change log, and autopilot-only sensors
 
 - Show build number, short SHA, and UTC build time in the top bar.

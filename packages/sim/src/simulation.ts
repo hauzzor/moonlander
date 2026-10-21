@@ -6,11 +6,17 @@ import {
   EYE_SENSOR_VIEW_DEFAULT,
   FIXED_DT,
   GRAVITY,
+  GRAVITY_SCALE_DEFAULT,
+  GRAVITY_SCALE_MAX,
+  GRAVITY_SCALE_MIN,
   INITIAL_HULL,
   INVULNERABILITY_SECONDS,
   SHIP_INERTIA,
   SHIP_MASS,
   START_POSITION,
+  THRUSTER_SCALE_DEFAULT,
+  THRUSTER_SCALE_MAX,
+  THRUSTER_SCALE_MIN,
 } from "./constants";
 import {
   advanceWithCollisions,
@@ -58,12 +64,27 @@ interface Current {
   eyeSensor: EyeSensorReading;
 }
 
+interface Scales {
+  gravityScale: number;
+  bottomThrusterScale: number;
+  rearThrusterScale: number;
+}
+
 function copyVec(vector: Vec2): Vec2 {
   return { x: vector.x, y: vector.y };
 }
 
 function idleThrusters(): Action {
   return { left: false, right: false, rear: false };
+}
+
+function normalizeScale(
+  value: number,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  return Number.isFinite(value) ? clamp(value, min, max) : fallback;
 }
 
 function initialBody(start: ShipStart | undefined): ShipState {
@@ -127,7 +148,12 @@ function scoreFor(progress: number): number {
   return Math.floor(progress);
 }
 
-function toSimState(current: Current, seed: number, spawn: Vec2): SimState {
+function toSimState(
+  current: Current,
+  seed: number,
+  spawn: Vec2,
+  scales: Scales,
+): SimState {
   return {
     tick: current.tick,
     time: current.tick * FIXED_DT,
@@ -149,6 +175,10 @@ function toSimState(current: Current, seed: number, spawn: Vec2): SimState {
     score: scoreFor(current.progress),
     progress: current.progress,
     eyeSensorRadius: current.eyeSensorRadius,
+    gravityScale: scales.gravityScale,
+    gravity: GRAVITY * scales.gravityScale,
+    bottomThrusterScale: scales.bottomThrusterScale,
+    rearThrusterScale: scales.rearThrusterScale,
     sensors: sensorSuiteFor(current, spawn),
   };
 }
@@ -172,8 +202,29 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
     activeField,
   );
 
+  const scales: Scales = {
+    gravityScale: normalizeScale(
+      options.gravityScale ?? GRAVITY_SCALE_DEFAULT,
+      GRAVITY_SCALE_MIN,
+      GRAVITY_SCALE_MAX,
+      GRAVITY_SCALE_DEFAULT,
+    ),
+    bottomThrusterScale: normalizeScale(
+      options.bottomThrusterScale ?? THRUSTER_SCALE_DEFAULT,
+      THRUSTER_SCALE_MIN,
+      THRUSTER_SCALE_MAX,
+      THRUSTER_SCALE_DEFAULT,
+    ),
+    rearThrusterScale: normalizeScale(
+      options.rearThrusterScale ?? THRUSTER_SCALE_DEFAULT,
+      THRUSTER_SCALE_MIN,
+      THRUSTER_SCALE_MAX,
+      THRUSTER_SCALE_DEFAULT,
+    ),
+  };
+
   const getState = (): SimState =>
-    toSimState(current, activeField.seed, spawn);
+    toSimState(current, activeField.seed, spawn, scales);
 
   const getObservation = (): Observation => {
     const { position, velocity } = current.body;
@@ -205,6 +256,10 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
       forwardSpeed: velocity.x * tangent.x + velocity.y * tangent.y,
       lateralSpeed: velocity.x * normal.x + velocity.y * normal.y,
       eyeSensorRadius: current.eyeSensorRadius,
+      gravityScale: scales.gravityScale,
+      gravity: GRAVITY * scales.gravityScale,
+      bottomThrusterScale: scales.bottomThrusterScale,
+      rearThrusterScale: scales.rearThrusterScale,
       sensors: sensorSuiteFor(current, spawn),
     };
   };
@@ -220,7 +275,13 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         return getState();
       }
 
-      const effect = thrusterEffect(current.body.angle, action);
+      const effect = thrusterEffect(
+        current.body.angle,
+        action,
+        scales.bottomThrusterScale,
+        scales.rearThrusterScale,
+      );
+      const gravity = GRAVITY * scales.gravityScale;
       const velocity = applyLinearDrag(
         {
           x:
@@ -228,7 +289,7 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
             (effect.force.x / SHIP_MASS) * FIXED_DT,
           y:
             current.body.velocity.y +
-            (effect.force.y / SHIP_MASS - GRAVITY) * FIXED_DT,
+            (effect.force.y / SHIP_MASS - gravity) * FIXED_DT,
         },
         FIXED_DT,
       );
@@ -305,6 +366,30 @@ export function createSimulation(options: SimulationOptions = {}): Simulation {
         ...current,
         eyeSensorRadius: configuredEyeSensorRadius,
       };
+    },
+    setGravityScale: (scale: number): void => {
+      scales.gravityScale = normalizeScale(
+        scale,
+        GRAVITY_SCALE_MIN,
+        GRAVITY_SCALE_MAX,
+        GRAVITY_SCALE_DEFAULT,
+      );
+    },
+    setBottomThrusterScale: (scale: number): void => {
+      scales.bottomThrusterScale = normalizeScale(
+        scale,
+        THRUSTER_SCALE_MIN,
+        THRUSTER_SCALE_MAX,
+        THRUSTER_SCALE_DEFAULT,
+      );
+    },
+    setRearThrusterScale: (scale: number): void => {
+      scales.rearThrusterScale = normalizeScale(
+        scale,
+        THRUSTER_SCALE_MIN,
+        THRUSTER_SCALE_MAX,
+        THRUSTER_SCALE_DEFAULT,
+      );
     },
     reset: (seed?: number): SimState => {
       if (!pinnedField && seed !== undefined) {

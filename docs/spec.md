@@ -14,11 +14,16 @@ from Node for controller training and evaluation.
 - 2D side view. Physics coordinates use +x right and +y up.
 - Fixed simulation step: `1 / 120` seconds. No wall-clock or frame-rate
   dependence inside `packages/sim`.
-- Gravity is `1.62 m/s²` downward.
+- Gravity is `GRAVITY = 1.62 m/s²` downward by default. `gravityScale` ranges
+  `0.1..10` and multiplies it; the fixed `1/120` step is unchanged.
+- Bottom and rear thruster forces scale independently by
+  `bottomThrusterScale` and `rearThrusterScale`, each `0.1..10`; force and torque
+  scale together at the mounts.
 - The world is an endless enclosed tunnel. There is no open sky, free obstacle
   field, or infinite ground plane.
-- The tunnel is generated deterministically from an integer seed. The same seed
-  and action sequence must produce the same tunnel, collisions, and state.
+- The tunnel is generated deterministically from an integer seed. The same
+  seed, scale schedule, and per-tick action sequence must produce the same
+  tunnel, collisions, and state.
 - The ship is a rigid body with position, velocity, angle, and angular
   velocity. Inertia is derived from mass and hull size.
 - No fuel. Thrust is available indefinitely.
@@ -48,7 +53,7 @@ Atmospheric drag:
   `ω = (ω + α * dt) / (1 + ANGULAR_DRAG * dt)`
 - drag applies to both linear axes and to angular velocity.
 
-Target response:
+Target response at default scales (`gravityScale = 1`, bottom/rear `= 1`):
 
 - single-thruster lateral acceleration at least `2.0 m/s²`
 - both-thruster net climb at least `12 m/s²`
@@ -244,11 +249,12 @@ are removed. The generic wall-proximity range is `WALL_SENSOR_RANGE`.
   Q/W/Space are ignored. E off restores manual control with the rear latch off.
 - R resets the run and the autopilot controller and keeps the autopilot mode.
 - The controller uses the full observation: eye sensor, direction, distance to
-  start, velocity, tunnel center/heading, and continuous nearest-wall
-  clearance.
+  start, velocity, tunnel center/heading, continuous nearest-wall clearance,
+  effective gravity, bottom-thruster scale, and rear-thruster scale.
 - The controller follows the tunnel centerline/tangent, uses rear thrust for
   forward speed and bottom thrusters for lift/attitude, and cuts rear thrust
-  when clearance is low. It prioritizes zero wall contact over speed.
+  when clearance is low. It prioritizes zero wall contact over speed. The
+  benchmark is defined at default scales.
 - The UI shows `MANUAL` / `AUTOPILOT` status and the rear thruster state.
 - Acceptance is an empirical zero-contact benchmark, not a formal
   collision-free guarantee.
@@ -295,6 +301,17 @@ are removed. The generic wall-proximity range is `WALL_SENSOR_RANGE`.
   `docs/CHANGELOG.md`, newest first, with expandable entries and a scrollable
   list. Escape, an outside click, and a close button dismiss it; focus returns
   to the button. Game keys do not affect the simulation while it is open.
+- A collapsible SIM panel exposes four logarithmic `0.1x..10x` sliders:
+  simulation speed, gravity, bottom thruster power, and rear thruster power.
+  `1x` is centered. Values apply live and persist across `R`, seed loads, and
+  reloads with `URL > localStorage > defaults`. URL parameters are `?speed=`,
+  `?gravity=`, `?bottomPower=`, and `?rearPower=`; localStorage keys are
+  `moonlander.speed`, `moonlander.gravity`, `moonlander.bottomPower`, and
+  `moonlander.rearPower`. Simulation speed is a game-loop time scale only;
+  gravity and power are simulation scales.
+- The SIM panel is always visible in manual and autopilot. While a SIM-panel
+  slider is focused, Q/W/Space/E/R are ignored so adjusting settings does not
+  fly the ship. The sensor radius slider keeps its pass-through behavior.
 - The bottom-right sensor console contains:
   - the eye-sensor chart, world-angle X axis, rim distances, radius slider, and
     scan tick;
@@ -327,6 +344,14 @@ The playable page must expose these stable hooks for Playwright:
   `data-active="true"` only while that thruster produces thrust
 - `data-testid="autopilot-status"` with `data-active="true|false"` and
   `MANUAL` / `AUTOPILOT` text
+- `data-testid="sim-panel"` and `sim-panel-toggle` with `aria-expanded` and
+  `data-collapsed`
+- `data-testid="sim-speed"`, `sim-speed-value`, `gravity-scale`,
+  `gravity-scale-value`, `bottom-power`, `bottom-power-value`, `rear-power`,
+  and `rear-power-value`, each with a numeric `data-value`
+- `data-testid="simulation-status"` with `data-tick`, `data-time`,
+  `data-time-scale`, `data-gravity-scale`, `data-gravity`, `data-bottom-power`,
+  and `data-rear-power`
 - `data-testid="instructions"` mentioning Q, W, Space, E, and R
 - `data-testid="outcome"` visible only after destruction, containing the final
   score
@@ -423,6 +448,10 @@ interface SimState {
   score: number;
   progress: number;
   eyeSensorRadius: number;
+  gravityScale: number;
+  gravity: number;
+  bottomThrusterScale: number;
+  rearThrusterScale: number;
   sensors: SensorSuite;
 }
 
@@ -439,6 +468,9 @@ interface SimulationOptions {
   start?: ShipStart;
   field?: Field;
   eyeSensorRadius?: number;
+  gravityScale?: number;
+  bottomThrusterScale?: number;
+  rearThrusterScale?: number;
 }
 
 interface CurvedWall {
@@ -483,6 +515,10 @@ interface Observation {
   forwardSpeed: number;
   lateralSpeed: number;
   eyeSensorRadius: number;
+  gravityScale: number;
+  gravity: number;
+  bottomThrusterScale: number;
+  rearThrusterScale: number;
   sensors: SensorSuite;
 }
 
@@ -497,6 +533,9 @@ interface Simulation {
   step(action: Action): SimState;
   reset(seed?: number): SimState;
   setEyeSensorRadius(radius: number): void;
+  setGravityScale(scale: number): void;
+  setBottomThrusterScale(scale: number): void;
+  setRearThrusterScale(scale: number): void;
   readonly field: Field;
 }
 ```
@@ -543,6 +582,10 @@ Required exports:
 - `EYE_SENSOR_VIEW_DEFAULT = 120`
 - `START_POSITION = { x: 0, y: 60 }`
 - `DEFAULT_SEED = 1`
+- `GRAVITY_SCALE_MIN = 0.1`, `GRAVITY_SCALE_MAX = 10`,
+  `GRAVITY_SCALE_DEFAULT = 1`
+- `THRUSTER_SCALE_MIN = 0.1`, `THRUSTER_SCALE_MAX = 10`,
+  `THRUSTER_SCALE_DEFAULT = 1`
 - `createField(seed)` creates a deterministic tunnel field.
 - `createSimulation(options?)` creates a deterministic simulation.
 - `createAutopilot()` creates the deterministic autopilot controller.
@@ -569,8 +612,16 @@ Simulation semantics:
   It does not rescan immediately; the next scheduled scan uses the new radius.
 - `simulation.reset(seed?)` keeps the configured eye radius and produces a
   fresh scan at tick `0` with that radius.
+- `gravityScale`, `bottomThrusterScale`, and `rearThrusterScale` default to `1`.
+  Finite values clamp to `0.1..10`; non-finite values fall back to `1`.
+  Effective gravity is `GRAVITY * gravityScale`. Bottom and rear force and
+  torque scale independently. Setters apply from the next tick, and reset
+  preserves the configured scales.
 - `simulation.getState()` and `getObservation()` expose both the configured
-  `eyeSensorRadius` and the four-block `sensors` suite.
+  `eyeSensorRadius` and the four-block `sensors` suite, plus the three scales
+  and effective `gravity`.
+- The same seed, scale schedule, and per-tick action sequence produce the same
+  state sequence. Time scale is game-only and never enters the simulation.
 - `createAutopilot()` returns a deterministic `Controller`. The game calls it
   once per fixed tick when E is active; the simulation itself does not own the
   autopilot mode. While active it exclusively controls all three thrusters;
@@ -630,6 +681,9 @@ Observation semantics:
   modal input isolation, and renderer gating.
 - Playwright verifies the build label, the Change Log modal, manual/autopilot
   sensor visibility, focus behavior, responsive layout, and console errors.
+- Unit and Playwright tests cover gravity and bottom/rear power scaling,
+  effective-scale observation, the collapsible SIM panel, URL/localStorage
+  persistence, and fixed-tick time scaling (including 0.1x/10x and long frames).
 - Two consecutive builds with different build times must keep identical JS/CSS
   asset names.
 - CI runs typecheck, unit tests, `sim:demo`, browser tests, and production build.

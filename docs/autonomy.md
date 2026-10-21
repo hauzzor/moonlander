@@ -36,8 +36,30 @@ velocity sensors. The reference autopilot is deterministic and safety-first;
 it maximizes progress and speed within its empirical zero-contact benchmark.
 
 `step` advances exactly one fixed tick (`FIXED_DT = 1 / 120`). The same seed,
-initial state, and action sequence produce the same state sequence and the same
-tunnel.
+initial state, scale schedule, and action sequence produce the same state
+sequence and the same tunnel.
+
+Gravity and thrust are configurable multipliers in `0.1..10`, default `1`:
+
+```ts
+const simulation = createSimulation({
+  seed: 1234,
+  gravityScale: 1,
+  bottomThrusterScale: 1,
+  rearThrusterScale: 1,
+});
+simulation.setGravityScale(2);
+simulation.setBottomThrusterScale(0.5);
+simulation.setRearThrusterScale(2);
+```
+
+`SimState` and `Observation` expose the scales and effective `gravity`. The
+setters clamp finite values and apply from the next tick; reset preserves the
+scales. The autopilot uses the observed effective gravity and thrust scales.
+The default 8-seed benchmark is defined at scale `1`.
+
+Time scale is a game-loop setting, not a simulation option. Headless callers
+run more or fewer `step` calls; `FIXED_DT` never changes.
 
 ## Observation
 
@@ -59,6 +81,10 @@ tunnel.
 | `forwardSpeed` | Velocity projected onto the tunnel tangent |
 | `lateralSpeed` | Velocity projected onto the tunnel normal |
 | `eyeSensorRadius` | Configured eye view radius in meters |
+| `gravityScale` | Gravity multiplier in `0.1..10` |
+| `gravity` | Effective gravity in m/s² (`GRAVITY * gravityScale`) |
+| `bottomThrusterScale` | Bottom thruster force/torque multiplier in `0.1..10` |
+| `rearThrusterScale` | Rear thruster force multiplier in `0.1..10` |
 | `sensors` | Four-block sensor suite: eye, direction, distance-to-start, velocity |
 
 All values are finite. The Starship collision capsule has radius 9 m and
@@ -97,12 +123,13 @@ at least `300 m`, and average world-x speed at least `4 m/s`.
 
 ## Model lifecycle
 
-- `createSimulation({ seed, hull?, start?, field?, eyeSensorRadius? })` creates
-  a run.
+- `createSimulation({ seed, hull?, start?, field?, eyeSensorRadius?,
+  gravityScale?, bottomThrusterScale?, rearThrusterScale? })` creates a run.
 - The default seed is `1`; seeds are unsigned 32-bit integers.
 - `reset(seed?)` restores the configured start and hull. Without a pinned
   field, it regenerates the tunnel when a seed is provided and reuses the
-  current seed otherwise. The configured eye radius persists.
+  current seed otherwise. The configured eye radius and gravity/thruster scales
+  persist.
 - `setEyeSensorRadius(radius)` clamps the configured eye view radius. The next
   scheduled scan uses it; the previous reading remains until then.
 - `SimulationOptions.field` pins a field for the simulation lifetime. It is

@@ -2,6 +2,9 @@ import type { Vec2 } from "./types";
 
 export const FIXED_DT = 1 / 120;
 export const GRAVITY = 1.62;
+export const GRAVITY_SCALE_MIN = 0.1;
+export const GRAVITY_SCALE_MAX = 10;
+export const GRAVITY_SCALE_DEFAULT = 1;
 export const FIELD_CHUNK_SIZE = 80;
 export const INITIAL_HULL = 100;
 export const DEFAULT_SEED = 1;
@@ -15,6 +18,9 @@ export const SHIP_INERTIA =
   (SHIP_MASS * (SHIP_LENGTH ** 2 + SHIP_HEIGHT ** 2)) / 12;
 
 export const THRUSTER_FORCE = 1800;
+export const THRUSTER_SCALE_MIN = 0.1;
+export const THRUSTER_SCALE_MAX = 10;
+export const THRUSTER_SCALE_DEFAULT = 1;
 export const THRUSTER_CANT = (15 * Math.PI) / 180;
 export const LEFT_MOUNT: Vec2 = { x: -16, y: -9 };
 export const RIGHT_MOUNT: Vec2 = { x: 16, y: -9 };

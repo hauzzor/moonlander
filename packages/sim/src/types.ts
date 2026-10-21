@@ -56,6 +56,10 @@ export interface SimState {
   score: number;
   progress: number;
   eyeSensorRadius: number;
+  gravityScale: number;
+  gravity: number;
+  bottomThrusterScale: number;
+  rearThrusterScale: number;
   sensors: SensorSuite;
 }
 
@@ -97,6 +101,9 @@ export interface SimulationOptions {
   start?: ShipStart;
   field?: Field;
   eyeSensorRadius?: number;
+  gravityScale?: number;
+  bottomThrusterScale?: number;
+  rearThrusterScale?: number;
 }
 
 export interface Observation {
@@ -116,6 +123,10 @@ export interface Observation {
   forwardSpeed: number;
   lateralSpeed: number;
   eyeSensorRadius: number;
+  gravityScale: number;
+  gravity: number;
+  bottomThrusterScale: number;
+  rearThrusterScale: number;
   sensors: SensorSuite;
 }
 
@@ -130,5 +141,8 @@ export interface Simulation {
   step(action: Action): SimState;
   reset(seed?: number): SimState;
   setEyeSensorRadius(radius: number): void;
+  setGravityScale(scale: number): void;
+  setBottomThrusterScale(scale: number): void;
+  setRearThrusterScale(scale: number): void;
   readonly field: Field;
 }

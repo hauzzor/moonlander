@@ -27,12 +27,20 @@ const observationKeys = [
   "forwardSpeed",
   "lateralSpeed",
   "eyeSensorRadius",
+  "gravityScale",
+  "gravity",
+  "bottomThrusterScale",
+  "rearThrusterScale",
   "sensors",
 ].sort();
 
 function expectFiniteObservation(observation: Observation): void {
   const { sensors, ...numericFields } = observation;
   expect(observation.eyeSensorRadius).toBeDefined();
+  expect(Number.isFinite(observation.gravityScale)).toBe(true);
+  expect(Number.isFinite(observation.gravity)).toBe(true);
+  expect(Number.isFinite(observation.bottomThrusterScale)).toBe(true);
+  expect(Number.isFinite(observation.rearThrusterScale)).toBe(true);
   expect(sensors).toBeDefined();
   expect(Object.values(numericFields).every(Number.isFinite)).toBe(true);
   expect(Number.isFinite(sensors.eye.radius)).toBe(true);
@@ -73,6 +81,10 @@ describe("tunnel-aware autonomy observation API", () => {
       forwardSpeed: 0,
       lateralSpeed: 0,
       eyeSensorRadius: sim.EYE_SENSOR_VIEW_DEFAULT,
+      gravityScale: sim.GRAVITY_SCALE_DEFAULT,
+      gravity: sim.GRAVITY,
+      bottomThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
+      rearThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
       sensors: simulation.getState().sensors,
     });
     expectFiniteObservation(observation);
@@ -89,6 +101,37 @@ describe("tunnel-aware autonomy observation API", () => {
     ]) {
       expect(removedField in observation).toBe(false);
     }
+  });
+
+  it("exposes the configured scales, effective gravity, and live setter values", () => {
+    const simulation = createSimulationWithField(createControlledField(), {
+      gravityScale: 2.5,
+      bottomThrusterScale: 3,
+      rearThrusterScale: 4,
+    });
+    const state = simulation.getState();
+    const observation = simulation.getObservation();
+
+    expect(observation.gravityScale).toBe(2.5);
+    expect(observation.gravity).toBeCloseTo(2.5 * sim.GRAVITY, 14);
+    expect(observation.bottomThrusterScale).toBe(3);
+    expect(observation.rearThrusterScale).toBe(4);
+    expect(observation.gravityScale).toBe(state.gravityScale);
+    expect(observation.gravity).toBe(state.gravity);
+    expect(observation.bottomThrusterScale).toBe(state.bottomThrusterScale);
+    expect(observation.rearThrusterScale).toBe(state.rearThrusterScale);
+    expectFiniteObservation(observation);
+
+    simulation.setGravityScale(0.5);
+    simulation.setBottomThrusterScale(0.25);
+    simulation.setRearThrusterScale(10);
+    const updated = simulation.getObservation();
+
+    expect(updated.gravityScale).toBe(0.5);
+    expect(updated.gravity).toBeCloseTo(0.5 * sim.GRAVITY, 14);
+    expect(updated.bottomThrusterScale).toBe(0.25);
+    expect(updated.rearThrusterScale).toBe(10);
+    expectFiniteObservation(updated);
   });
 
   it("reports signed center offset and world velocity components in a straight tunnel", () => {

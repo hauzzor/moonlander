@@ -240,6 +240,18 @@ describe("thrusterEffect", () => {
     expect(typeof effect.force.y).toBe("number");
   });
 
+  it("defaults the optional bottom and rear scale arguments to 1", () => {
+    for (const action of ALL_ACTIONS) {
+      for (const angle of [0, 0.25, -0.8, Math.PI / 2]) {
+        const omitted = thrusterEffect(angle, action);
+        expect(thrusterEffect(angle, action, 1, 1)).toEqual(omitted);
+        expect(thrusterEffect(angle, action, undefined, undefined)).toEqual(
+          omitted,
+        );
+      }
+    }
+  });
+
   it("produces no force and no torque when no thruster fires", () => {
     const effect = thrusterEffect(0, NO_THRUST);
 

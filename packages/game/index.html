@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#080a14" />
-    <title>Moonlander — Starship Course</title>
+    <title>Moonlander &mdash; Starship Course</title>
   </head>
   <body class="sensors-hidden">
     <div id="app">
@@ -36,6 +36,158 @@
           </button>
         </div>
       </header>
+
+      <section
+        class="sim-panel"
+        data-testid="sim-panel"
+        data-collapsed="false"
+        aria-expanded="true"
+        aria-label="Simulation settings"
+      >
+        <div class="sim-panel-header">
+          <span class="sim-panel-title">SIM</span>
+          <button
+            class="sim-panel-toggle"
+            id="sim-panel-toggle"
+            data-testid="sim-panel-toggle"
+            data-collapsed="false"
+            type="button"
+            aria-expanded="true"
+            aria-controls="sim-panel-body"
+          >
+            <span class="sim-panel-toggle-label">SIM SETTINGS</span>
+            <span class="sim-panel-chevron" aria-hidden="true"></span>
+          </button>
+          <span
+            class="visually-hidden"
+            data-testid="simulation-status"
+            data-value="0"
+            data-tick="0"
+            data-time="0"
+            data-time-scale="1"
+            data-gravity-scale="1"
+            data-gravity="1.62"
+            data-bottom-power="1"
+            data-rear-power="1"
+          ></span>
+        </div>
+        <div class="sim-panel-body" id="sim-panel-body">
+          <div class="sim-control">
+            <div class="sim-control-header">
+              <label class="sim-control-label" for="sim-speed">
+                SPEED
+              </label>
+              <output
+                class="sim-control-value"
+                data-testid="sim-speed-value"
+                data-value="1"
+              >
+                1x
+              </output>
+            </div>
+            <input
+              class="sim-slider"
+              id="sim-speed"
+              data-testid="sim-speed"
+              data-value="1"
+              data-game-keys="block"
+              type="range"
+              min="-1"
+              max="1"
+              step="0.05"
+              value="0"
+              aria-label="Simulation speed"
+            />
+          </div>
+
+          <div class="sim-control">
+            <div class="sim-control-header">
+              <label class="sim-control-label" for="gravity-scale">
+                GRAVITY
+              </label>
+              <output
+                class="sim-control-value"
+                data-testid="gravity-scale-value"
+                data-value="1"
+                data-gravity="1.62"
+              >
+                1.62 m/s&sup2;
+              </output>
+            </div>
+            <input
+              class="sim-slider"
+              id="gravity-scale"
+              data-testid="gravity-scale"
+              data-value="1"
+              data-gravity="1.62"
+              data-game-keys="block"
+              type="range"
+              min="-1"
+              max="1"
+              step="0.05"
+              value="0"
+              aria-label="Gravity multiplier"
+            />
+          </div>
+
+          <div class="sim-control">
+            <div class="sim-control-header">
+              <label class="sim-control-label" for="bottom-power">
+                BOTTOM POWER
+              </label>
+              <output
+                class="sim-control-value"
+                data-testid="bottom-power-value"
+                data-value="1"
+              >
+                1x
+              </output>
+            </div>
+            <input
+              class="sim-slider"
+              id="bottom-power"
+              data-testid="bottom-power"
+              data-value="1"
+              data-game-keys="block"
+              type="range"
+              min="-1"
+              max="1"
+              step="0.05"
+              value="0"
+              aria-label="Bottom thruster power multiplier"
+            />
+          </div>
+
+          <div class="sim-control">
+            <div class="sim-control-header">
+              <label class="sim-control-label" for="rear-power">
+                REAR POWER
+              </label>
+              <output
+                class="sim-control-value"
+                data-testid="rear-power-value"
+                data-value="1"
+              >
+                1x
+              </output>
+            </div>
+            <input
+              class="sim-slider"
+              id="rear-power"
+              data-testid="rear-power"
+              data-value="1"
+              data-game-keys="block"
+              type="range"
+              min="-1"
+              max="1"
+              step="0.05"
+              value="0"
+              aria-label="Rear thruster power multiplier"
+            />
+          </div>
+        </div>
+      </section>
+
       <main class="game">
         <div class="game-hud">
           <div class="telemetry" role="group" aria-label="Flight telemetry">
@@ -148,7 +300,7 @@
           <span><kbd>Space</kbd> rear latch</span>
           <span><kbd>E</kbd> autopilot</span>
           <span><kbd>R</kbd> new run</span>
-          <span class="instructions-hint">Stay inside the tunnel — wall impacts damage the hull.</span>
+          <span class="instructions-hint">Stay inside the tunnel &mdash; wall impacts damage the hull.</span>
         </div>
 
         <aside

@@ -400,6 +400,68 @@ describe("input latch releases", () => {
   });
 });
 
+describe("sim panel input guard", () => {
+  function createSimSlider(): FakeHTMLInputElement {
+    const panel = new FakeElement("aside");
+    panel.setAttribute("data-testid", "sim-panel");
+    panel.classList.add("sim-panel");
+
+    const slider = createTypedInput("range");
+    slider.setAttribute("data-testid", "sim-speed");
+    panel.appendChild(slider);
+
+    return slider;
+  }
+
+  it.each([
+    ["Q", "KeyQ", "q"],
+    ["W", "KeyW", "w"],
+    ["Space", "Space", " "],
+    ["E", "KeyE", "e"],
+    ["R", "KeyR", "r"],
+  ])("blocks %s while a SIM-panel slider is focused", (_name, code, key) => {
+    const input = createTestInput();
+    const slider = createSimSlider();
+
+    dom.window.dispatch("keydown", {
+      key: key ?? "",
+      code,
+      target: slider,
+    });
+
+    expect(input.keys).toEqual(noLatches);
+    expect(toggleAutopilot).not.toHaveBeenCalled();
+    expect(restart).not.toHaveBeenCalled();
+  });
+
+  it("keeps the documented sensor radius slider pass-through", () => {
+    const input = createTestInput();
+    const panel = new FakeElement("aside");
+    panel.setAttribute("data-testid", "eye-sensor-panel");
+    const slider = createTypedInput("range");
+    slider.setAttribute("data-testid", "eye-sensor-radius");
+    panel.appendChild(slider);
+
+    dom.window.dispatch("keydown", { key: "q", target: slider });
+    expect(input.keys.left).toBe(true);
+
+    dom.window.dispatch("keydown", {
+      code: "Space",
+      key: " ",
+      target: slider,
+    });
+    expect(input.keys.rear).toBe(true);
+
+    dom.window.dispatch("keydown", { key: "e", target: slider });
+    expect(toggleAutopilot).toHaveBeenCalledTimes(1);
+    expect(input.keys.rear).toBe(false);
+
+    dom.window.dispatch("keydown", { key: "r", target: slider });
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(input.keys).toEqual(noLatches);
+  });
+});
+
 describe("input editable targets", () => {
   const editableTargets: [string, () => FakeElement][] = [
     ["input", () => new FakeHTMLInputElement()],

@@ -30,6 +30,12 @@ describe("fixed-step tunnel simulation", () => {
   it("exports the new physics and tunnel constants without gate or ground constants", () => {
     expect(sim.FIXED_DT).toBe(1 / 120);
     expect(sim.GRAVITY).toBe(1.62);
+    expect(sim.GRAVITY_SCALE_MIN).toBe(0.1);
+    expect(sim.GRAVITY_SCALE_MAX).toBe(10);
+    expect(sim.GRAVITY_SCALE_DEFAULT).toBe(1);
+    expect(sim.THRUSTER_SCALE_MIN).toBe(0.1);
+    expect(sim.THRUSTER_SCALE_MAX).toBe(10);
+    expect(sim.THRUSTER_SCALE_DEFAULT).toBe(1);
     expect(sim.FIELD_CHUNK_SIZE).toBe(80);
     expect(sim.INITIAL_HULL).toBe(100);
     expect(sim.SHIP_MASS).toBe(200);
@@ -78,11 +84,15 @@ describe("fixed-step tunnel simulation", () => {
     const state = sim.createSimulation().getState();
 
     expect(Object.keys(state).sort()).toEqual([
+      "bottomThrusterScale",
       "eyeSensorRadius",
+      "gravity",
+      "gravityScale",
       "hull",
       "invulnerable",
       "outcome",
       "progress",
+      "rearThrusterScale",
       "score",
       "seed",
       "sensors",
@@ -108,6 +118,10 @@ describe("fixed-step tunnel simulation", () => {
       score: 0,
       progress: 0,
       eyeSensorRadius: sim.EYE_SENSOR_VIEW_DEFAULT,
+      gravityScale: sim.GRAVITY_SCALE_DEFAULT,
+      gravity: sim.GRAVITY,
+      bottomThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
+      rearThrusterScale: sim.THRUSTER_SCALE_DEFAULT,
       sensors: expect.objectContaining({
         eye: expect.objectContaining({
           radius: sim.EYE_SENSOR_VIEW_DEFAULT,
@@ -126,6 +140,33 @@ describe("fixed-step tunnel simulation", () => {
     expect("fuel" in state).toBe(false);
     expect("sensor" in state).toBe(false);
     expect("sensorRadius" in state).toBe(false);
+  });
+
+  it("exposes configured scale options and preserves them on reset", () => {
+    const simulation = sim.createSimulation({
+      seed: 19,
+      gravityScale: 2,
+      bottomThrusterScale: 3,
+      rearThrusterScale: 4,
+    });
+    const state = simulation.getState();
+    const observation = simulation.getObservation();
+
+    expect(state.gravityScale).toBe(2);
+    expect(state.gravity).toBeCloseTo(2 * sim.GRAVITY, 14);
+    expect(state.bottomThrusterScale).toBe(3);
+    expect(state.rearThrusterScale).toBe(4);
+    expect(observation.gravityScale).toBe(2);
+    expect(observation.gravity).toBeCloseTo(2 * sim.GRAVITY, 14);
+    expect(observation.bottomThrusterScale).toBe(3);
+    expect(observation.rearThrusterScale).toBe(4);
+
+    simulation.step(noThrusters);
+    const reset = simulation.reset();
+    expect(reset.gravityScale).toBe(2);
+    expect(reset.gravity).toBeCloseTo(2 * sim.GRAVITY, 14);
+    expect(reset.bottomThrusterScale).toBe(3);
+    expect(reset.rearThrusterScale).toBe(4);
   });
 
   it("advances exactly one 1/120-second tick and derives time from tick", () => {

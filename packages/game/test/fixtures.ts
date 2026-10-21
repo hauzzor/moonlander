@@ -1,4 +1,17 @@
-import type { EyeSensorReading, SimState, Vec2 } from "@moonlander/sim";
+import {
+  GRAVITY,
+  type EyeSensorReading,
+  type SimState,
+  type Vec2,
+} from "@moonlander/sim";
+import {
+  FakeElement,
+  FakeHTMLInputElement,
+  installFakeDom,
+  type FakeCanvasElement,
+  type FakeDialogElement,
+  type FakeDom,
+} from "./fake-dom";
 
 export interface StateOverrides {
   position?: Vec2;
@@ -15,6 +28,10 @@ export interface StateOverrides {
   time?: number;
   tick?: number;
   eyeSensorRadius?: number;
+  gravityScale?: number;
+  gravity?: number;
+  bottomThrusterScale?: number;
+  rearThrusterScale?: number;
 }
 
 export const START_POSITION: Vec2 = { x: 0, y: 60 };
@@ -23,6 +40,7 @@ export function makeState(overrides: StateOverrides = {}): SimState {
   const position = overrides.position ?? START_POSITION;
   const velocity = overrides.velocity ?? { x: 0, y: 0 };
   const radius = overrides.eyeSensorRadius ?? 120;
+  const gravityScale = overrides.gravityScale ?? 1;
   const eye: EyeSensorReading = {
     radius,
     tick: overrides.tick ?? 0,
@@ -52,6 +70,10 @@ export function makeState(overrides: StateOverrides = {}): SimState {
     score: overrides.score ?? 0,
     progress: overrides.progress ?? 0,
     eyeSensorRadius: radius,
+    gravityScale,
+    gravity: overrides.gravity ?? GRAVITY * gravityScale,
+    bottomThrusterScale: overrides.bottomThrusterScale ?? 1,
+    rearThrusterScale: overrides.rearThrusterScale ?? 1,
     sensors: {
       eye,
       direction: { angle: overrides.angle ?? 0 },
@@ -66,6 +88,199 @@ export function makeState(overrides: StateOverrides = {}): SimState {
         angle: Math.atan2(velocity.y, velocity.x),
       },
     },
+  };
+}
+
+export interface GameFixtureOptions {
+  search?: string;
+  storage?: Record<string, string>;
+  href?: string;
+}
+
+export interface GameFixture {
+  dom: FakeDom;
+  seedInput: FakeHTMLInputElement;
+  seedLoad: FakeElement;
+  seedCopy: FakeElement;
+  chart: FakeCanvasElement;
+  slider: FakeHTMLInputElement;
+  panel: FakeElement;
+  radarStatus: FakeElement;
+  changelogButton: FakeElement;
+  changelogDialog: FakeDialogElement;
+  changelogClose: FakeElement;
+  changelogList: FakeElement;
+  simPanel: FakeElement;
+  simToggle: FakeElement;
+  simSpeed: FakeHTMLInputElement;
+  gravityScale: FakeHTMLInputElement;
+  bottomPower: FakeHTMLInputElement;
+  rearPower: FakeHTMLInputElement;
+  simSpeedValue: FakeElement;
+  gravityScaleValue: FakeElement;
+  bottomPowerValue: FakeElement;
+  rearPowerValue: FakeElement;
+  simulationStatus: FakeElement;
+}
+
+function addClassedChild(
+  parent: FakeElement,
+  className: string,
+): FakeElement {
+  const child = new FakeElement("span");
+  child.classList.add(className);
+  return parent.appendChild(child);
+}
+
+function addRange(
+  fakeDom: FakeDom,
+  testId: string,
+  parent: FakeElement,
+): FakeHTMLInputElement {
+  const input = fakeDom.addInput(testId);
+  input.type = "range";
+  input.setAttribute("type", "range");
+  input.min = "-1";
+  input.max = "1";
+  input.step = "0.05";
+  input.value = "0";
+  parent.appendChild(input);
+  return input;
+}
+
+export function installGameFixture(
+  options: GameFixtureOptions = {},
+): GameFixture {
+  const fakeDom = installFakeDom({ dpr: 1, width: 800, height: 600 });
+
+  const seedInput = fakeDom.addInput("seed-input");
+  const seedLoad = fakeDom.addElement("seed-load", "button");
+  const seedCopy = new FakeElement("button");
+  seedCopy.setAttribute("id", "seed-copy");
+
+  const querySelector = fakeDom.document.querySelector.bind(fakeDom.document);
+  fakeDom.document.querySelector = (selector: string) =>
+    selector === "#seed-copy" ? seedCopy : querySelector(selector);
+
+  for (const testId of [
+    "hud-hull",
+    "hud-speed",
+    "hud-progress",
+    "hud-score",
+  ]) {
+    addClassedChild(fakeDom.addElement(testId), "hud-value");
+  }
+
+  for (const testId of [
+    "thruster-left",
+    "thruster-right",
+    "thruster-rear",
+  ]) {
+    fakeDom.addElement(testId);
+  }
+
+  addClassedChild(
+    fakeDom.addElement("autopilot-status"),
+    "autopilot-value",
+  );
+  fakeDom.addElement("seed-display");
+
+  const outcome = fakeDom.addElement("outcome");
+  outcome.classList.add("hidden");
+  outcome.setAttribute("aria-hidden", "true");
+  addClassedChild(outcome, "outcome-text");
+  addClassedChild(outcome, "outcome-score-value");
+
+  const panel = fakeDom.addElement("eye-sensor-panel", "aside");
+  const chart = fakeDom.addCanvas("eye-sensor-chart");
+  chart.clientWidth = 374;
+  chart.clientHeight = 138;
+  const slider = fakeDom.addInput("eye-sensor-radius");
+  slider.type = "range";
+  slider.setAttribute("type", "range");
+  slider.min = "20";
+  slider.max = "200";
+  slider.step = "5";
+  slider.value = "120";
+  panel.appendChild(chart);
+  panel.appendChild(slider);
+  fakeDom.addElement("radar-status");
+
+  for (const testId of [
+    "eye-sensor-radius-value",
+    "eye-sensor-scan-tick",
+    "direction-needle",
+    "direction-value",
+    "distance-to-start",
+    "velocity-speed",
+    "velocity-vx",
+    "velocity-vy",
+    "velocity-angle",
+  ]) {
+    fakeDom.addElement(testId);
+  }
+
+  const simPanel = fakeDom.addElement("sim-panel", "aside");
+  simPanel.classList.add("sim-panel");
+  const simToggle = fakeDom.addElement("sim-panel-toggle", "button");
+  simPanel.appendChild(simToggle);
+  const simSpeed = addRange(fakeDom, "sim-speed", simPanel);
+  const gravityScale = addRange(fakeDom, "gravity-scale", simPanel);
+  const bottomPower = addRange(fakeDom, "bottom-power", simPanel);
+  const rearPower = addRange(fakeDom, "rear-power", simPanel);
+  const simSpeedValue = fakeDom.addElement("sim-speed-value", "output");
+  const gravityScaleValue = fakeDom.addElement(
+    "gravity-scale-value",
+    "output",
+  );
+  const bottomPowerValue = fakeDom.addElement(
+    "bottom-power-value",
+    "output",
+  );
+  const rearPowerValue = fakeDom.addElement("rear-power-value", "output");
+  simPanel.appendChild(simSpeedValue);
+  simPanel.appendChild(gravityScaleValue);
+  simPanel.appendChild(bottomPowerValue);
+  simPanel.appendChild(rearPowerValue);
+  const simulationStatus = fakeDom.addElement("simulation-status", "span");
+  simPanel.appendChild(simulationStatus);
+
+  const changelogButton = fakeDom.addElement("changelog-button", "button");
+  const changelogDialog = fakeDom.addDialog("changelog-dialog");
+  const changelogClose = fakeDom.addElement("changelog-close", "button");
+  const changelogList = fakeDom.addElement("changelog-list", "div");
+
+  fakeDom.window.location.href =
+    options.href ?? `http://localhost/${options.search ?? ""}`;
+
+  for (const [key, value] of Object.entries(options.storage ?? {})) {
+    fakeDom.window.localStorage.setItem(key, value);
+  }
+
+  return {
+    dom: fakeDom,
+    seedInput,
+    seedLoad,
+    seedCopy,
+    chart,
+    slider,
+    panel,
+    radarStatus: fakeDom.document.element("radar-status")!,
+    changelogButton,
+    changelogDialog,
+    changelogClose,
+    changelogList,
+    simPanel,
+    simToggle,
+    simSpeed,
+    gravityScale,
+    bottomPower,
+    rearPower,
+    simSpeedValue,
+    gravityScaleValue,
+    bottomPowerValue,
+    rearPowerValue,
+    simulationStatus,
   };
 }
 

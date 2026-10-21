@@ -43,28 +43,42 @@ export interface ThrusterEffect {
 export function thrusterEffect(
   angle: number,
   action: Action,
+  bottomScale = 1,
+  rearScale = 1,
 ): ThrusterEffect {
   let forceX = 0;
   let forceY = 0;
   let torque = 0;
 
   if (action.left) {
-    const force = rotate(LEFT_FORCE, angle);
+    const localForce = {
+      x: LEFT_FORCE.x * bottomScale,
+      y: LEFT_FORCE.y * bottomScale,
+    };
+    const force = rotate(localForce, angle);
     forceX += force.x;
     forceY += force.y;
-    torque += crossZ(LEFT_MOUNT, LEFT_FORCE);
+    torque += crossZ(LEFT_MOUNT, localForce);
   }
   if (action.right) {
-    const force = rotate(RIGHT_FORCE, angle);
+    const localForce = {
+      x: RIGHT_FORCE.x * bottomScale,
+      y: RIGHT_FORCE.y * bottomScale,
+    };
+    const force = rotate(localForce, angle);
     forceX += force.x;
     forceY += force.y;
-    torque += crossZ(RIGHT_MOUNT, RIGHT_FORCE);
+    torque += crossZ(RIGHT_MOUNT, localForce);
   }
   if (action.rear) {
-    const force = rotate(REAR_FORCE, angle);
+    const localForce = {
+      x: REAR_FORCE.x * rearScale,
+      y: REAR_FORCE.y * rearScale,
+    };
+    const force = rotate(localForce, angle);
     forceX += force.x;
     forceY += force.y;
-    torque += crossZ(REAR_MOUNT, REAR_FORCE);
+    torque += crossZ(REAR_MOUNT, localForce);
   }
 
   return { force: { x: forceX, y: forceY }, torque };

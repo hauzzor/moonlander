@@ -4,6 +4,7 @@ import type {
   Observation,
   RunOutcome,
   ShipStart,
+  SimState,
   SimulationOptions,
 } from "../src/index";
 import { sim } from "./helpers";
@@ -24,6 +25,9 @@ interface BenchmarkRunOptions {
   eyeSensorRadius?: number;
   start?: ShipStart;
   ticks?: number;
+  gravityScale?: number;
+  bottomThrusterScale?: number;
+  rearThrusterScale?: number;
 }
 
 interface BenchmarkResult {
@@ -32,6 +36,10 @@ interface BenchmarkResult {
   time: number;
   outcome: RunOutcome;
   eyeSensorRadius: number;
+  gravityScale: number;
+  gravity: number;
+  bottomThrusterScale: number;
+  rearThrusterScale: number;
   progress: number;
   hull: number;
   hullViolationTicks: number;
@@ -52,6 +60,15 @@ function runBenchmark(options: BenchmarkRunOptions): BenchmarkResult {
   }
   if (options.start !== undefined) {
     simulationOptions.start = options.start;
+  }
+  if (options.gravityScale !== undefined) {
+    simulationOptions.gravityScale = options.gravityScale;
+  }
+  if (options.bottomThrusterScale !== undefined) {
+    simulationOptions.bottomThrusterScale = options.bottomThrusterScale;
+  }
+  if (options.rearThrusterScale !== undefined) {
+    simulationOptions.rearThrusterScale = options.rearThrusterScale;
   }
 
   const simulation = sim.createSimulation(simulationOptions);
@@ -96,6 +113,10 @@ function runBenchmark(options: BenchmarkRunOptions): BenchmarkResult {
     time: completedTicks * sim.FIXED_DT,
     outcome: state.outcome,
     eyeSensorRadius: observation.eyeSensorRadius,
+    gravityScale: observation.gravityScale,
+    gravity: observation.gravity,
+    bottomThrusterScale: observation.bottomThrusterScale,
+    rearThrusterScale: observation.rearThrusterScale,
     progress: state.progress,
     hull: state.hull,
     hullViolationTicks,
@@ -119,6 +140,10 @@ function expectFullSafeRun(result: BenchmarkResult): void {
   expect(result.minNearestWallDistance).toBeGreaterThan(0);
   expect(result.hullViolationTicks).toBe(0);
   expect(result.hull).toBe(EXPECTED_HULL);
+  expect(result.gravityScale).toBe(1);
+  expect(result.gravity).toBeCloseTo(sim.GRAVITY, 12);
+  expect(result.bottomThrusterScale).toBe(1);
+  expect(result.rearThrusterScale).toBe(1);
 }
 
 describe("autopilot eight-seed benchmark", () => {
@@ -212,4 +237,156 @@ describe("reduced 20 m eye-sensor radius safety", () => {
     expect(result.eyeSensorRadius).toBe(REDUCED_EYE_RADIUS);
     expectFullSafeRun(result);
   }, RUN_TIMEOUT_MS);
+});
+
+const EXTREME_TICKS = 600;
+const EXTREME_SEEDS = [1, 42] as const;
+const EXTREME_CASES = [
+  {
+    label: "minimum gravity and both powers",
+    gravityScale: 0.1,
+    bottomThrusterScale: 0.1,
+    rearThrusterScale: 0.1,
+  },
+  {
+    label: "maximum gravity and both powers",
+    gravityScale: 10,
+    bottomThrusterScale: 10,
+    rearThrusterScale: 10,
+  },
+  {
+    label: "maximum gravity with weak bottom and strong rear",
+    gravityScale: 10,
+    bottomThrusterScale: 0.1,
+    rearThrusterScale: 10,
+  },
+  {
+    label: "minimum gravity with strong bottom and weak rear",
+    gravityScale: 0.1,
+    bottomThrusterScale: 10,
+    rearThrusterScale: 0.1,
+  },
+] as const;
+
+interface SmokeRunOptions {
+  seed: number;
+  gravityScale: number;
+  bottomThrusterScale: number;
+  rearThrusterScale: number;
+}
+
+interface SmokeResult {
+  finalState: SimState;
+  finalObservation: Observation;
+  sampledStates: SimState[];
+  nonFiniteStateTicks: number;
+  nonFiniteObservationTicks: number;
+}
+
+function numericFieldsAreFinite(value: object): boolean {
+  return Object.values(value).every(
+    (entry) => typeof entry !== "number" || Number.isFinite(entry),
+  );
+}
+
+function sensorsAreFinite(sensors: Observation["sensors"]): boolean {
+  return (
+    Number.isFinite(sensors.eye.radius) &&
+    Number.isFinite(sensors.eye.tick) &&
+    Number.isFinite(sensors.eye.origin.x) &&
+    Number.isFinite(sensors.eye.origin.y) &&
+    Number.isFinite(sensors.eye.heading) &&
+    sensors.eye.distances.every(Number.isFinite) &&
+    Number.isFinite(sensors.direction.angle) &&
+    Number.isFinite(sensors.distanceToStart) &&
+    Number.isFinite(sensors.velocity.vx) &&
+    Number.isFinite(sensors.velocity.vy) &&
+    Number.isFinite(sensors.velocity.speed) &&
+    Number.isFinite(sensors.velocity.angle)
+  );
+}
+
+function observationIsFinite(observation: Observation): boolean {
+  const { sensors, ...numeric } = observation;
+  return numericFieldsAreFinite(numeric) && sensorsAreFinite(sensors);
+}
+
+function stateIsFinite(state: SimState): boolean {
+  const { ship, thrusters, sensors, ...numeric } = state;
+
+  return (
+    numericFieldsAreFinite(numeric) &&
+    numericFieldsAreFinite(ship) &&
+    numericFieldsAreFinite(ship.position) &&
+    numericFieldsAreFinite(ship.velocity) &&
+    typeof thrusters.left === "boolean" &&
+    typeof thrusters.right === "boolean" &&
+    typeof thrusters.rear === "boolean" &&
+    sensorsAreFinite(sensors)
+  );
+}
+
+function runExtremeSmoke(options: SmokeRunOptions): SmokeResult {
+  const simulation = sim.createSimulation(options);
+  const autopilot = sim.createAutopilot();
+  let state = simulation.getState();
+  let observation = simulation.getObservation();
+  const sampledStates: SimState[] = [state];
+  let nonFiniteStateTicks = stateIsFinite(state) ? 0 : 1;
+  let nonFiniteObservationTicks = observationIsFinite(observation) ? 0 : 1;
+
+  for (let tick = 0; tick < EXTREME_TICKS; tick += 1) {
+    state = simulation.step(autopilot.act(observation));
+    observation = simulation.getObservation();
+    if (!stateIsFinite(state)) {
+      nonFiniteStateTicks += 1;
+    }
+    if (!observationIsFinite(observation)) {
+      nonFiniteObservationTicks += 1;
+    }
+    if ((tick + 1) % 60 === 0) {
+      sampledStates.push(state);
+    }
+  }
+
+  return {
+    finalState: state,
+    finalObservation: observation,
+    sampledStates,
+    nonFiniteStateTicks,
+    nonFiniteObservationTicks,
+  };
+}
+
+describe("autopilot extreme-scale smoke", () => {
+  it.each(EXTREME_CASES)(
+    "$label stays finite and deterministic for the fixed smoke seeds",
+    (testCase) => {
+      for (const seed of EXTREME_SEEDS) {
+        const first = runExtremeSmoke({ ...testCase, seed });
+        const second = runExtremeSmoke({ ...testCase, seed });
+
+        expect(first.nonFiniteStateTicks).toBe(0);
+        expect(first.nonFiniteObservationTicks).toBe(0);
+        expect(first.finalState.outcome).toBe(second.finalState.outcome);
+        expect(first.finalState).toEqual(second.finalState);
+        expect(first.finalObservation).toEqual(second.finalObservation);
+        expect(first.sampledStates).toEqual(second.sampledStates);
+        expect(first.finalObservation.gravityScale).toBe(
+          testCase.gravityScale,
+        );
+        expect(first.finalObservation.gravity).toBeCloseTo(
+          sim.GRAVITY * testCase.gravityScale,
+          12,
+        );
+        expect(first.finalObservation.bottomThrusterScale).toBe(
+          testCase.bottomThrusterScale,
+        );
+        expect(first.finalObservation.rearThrusterScale).toBe(
+          testCase.rearThrusterScale,
+        );
+      }
+    },
+    RUN_TIMEOUT_MS,
+  );
 });

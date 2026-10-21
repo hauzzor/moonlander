@@ -74,6 +74,39 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return false;
 }
 
+const GAME_KEY_BLOCK_ATTRIBUTE = "data-game-keys";
+const GAME_KEY_BLOCK_VALUE = "block";
+const SIM_PANEL_SLIDER_TEST_IDS = new Set([
+  "sim-speed",
+  "gravity-scale",
+  "bottom-power",
+  "rear-power",
+]);
+
+function isGameKeyBlockedTarget(target: EventTarget | null): boolean {
+  if (target === null || typeof target !== "object") {
+    return false;
+  }
+
+  const element = target as EditableTargetLike;
+  if (typeof element.getAttribute !== "function") {
+    return false;
+  }
+
+  const value = element.getAttribute(GAME_KEY_BLOCK_ATTRIBUTE);
+  if (
+    typeof value === "string" &&
+    value.trim().toLowerCase() === GAME_KEY_BLOCK_VALUE
+  ) {
+    return true;
+  }
+
+  const testId = element.getAttribute("data-testid");
+  return (
+    typeof testId === "string" && SIM_PANEL_SLIDER_TEST_IDS.has(testId)
+  );
+}
+
 function preventDefault(event: KeyboardEvent): void {
   if (typeof event.preventDefault === "function") {
     event.preventDefault();
@@ -137,6 +170,10 @@ export function createInput(options: InputOptions): InputController {
       return;
     }
 
+    if (isGameKeyBlockedTarget(event.target)) {
+      return;
+    }
+
     if (isEditableTarget(event.target)) {
       return;
     }
@@ -196,7 +233,9 @@ export function createInput(options: InputOptions): InputController {
   };
 
   const handleKeyUp = (event: KeyboardEvent): void => {
-    const editable = isEditableTarget(event.target);
+    const editable =
+      isEditableTarget(event.target) ||
+      isGameKeyBlockedTarget(event.target);
     const key = eventKey(event);
     const code = eventCode(event);
 

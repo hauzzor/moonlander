@@ -348,11 +348,14 @@ describe("changelog parsing", () => {
       "utf8",
     );
     const entries = parseChangelog(markdown);
+    const firstHeader = /^## \d{4}-\d{2}-\d{2}\s+[\u2014\u2013-]\s+(.+)$/m.exec(
+      markdown,
+    );
 
     expect(entries.length).toBeGreaterThan(0);
-    expect(entries[0]?.title).toBe(
-      "Build info, change log, and autopilot-only sensors",
-    );
+    expect(firstHeader).not.toBeNull();
+    expect(entries[0]?.title).toBe(firstHeader?.[1]?.trim());
+    expect(entries[0]?.title).toBe("Configurable simulation settings");
 
     for (let index = 1; index < entries.length; index += 1) {
       expect(

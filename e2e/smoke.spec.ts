@@ -23,10 +23,11 @@ test("page loads without uncaught page errors or console errors", async ({ page 
   expect(errors).toEqual([]);
 });
 
-test("browser title contains Moonlander", async ({ page }) => {
+test("browser title is Moonlander — Starship Course", async ({ page }) => {
   await page.goto("./");
 
-  await expect(page).toHaveTitle(/Moonlander/);
+  await expect(page).toHaveTitle("Moonlander — Starship Course");
+  await expect(page).not.toHaveTitle(/â€”/);
 });
 
 test("an accessible Moonlander heading is visible", async ({ page }) => {
@@ -67,6 +68,24 @@ test("the page plays without uncaught page errors or console errors", async ({ p
   await slider.focus();
   await slider.press("Home");
   await slider.press("End");
+
+  const simToggle = page.getByTestId("sim-panel-toggle");
+  await simToggle.click();
+  await expect(simToggle).toHaveAttribute("aria-expanded", "false");
+  await simToggle.click();
+  await expect(simToggle).toHaveAttribute("aria-expanded", "true");
+
+  const simSpeed = page.getByTestId("sim-speed");
+  await simSpeed.focus();
+  await simSpeed.press("Home");
+  await simSpeed.press("End");
+  await simSpeed.press("Home");
+  await page.evaluate(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) {
+      active.blur();
+    }
+  });
 
   await page.keyboard.press("e");
   await expect(page.getByTestId("autopilot-status")).toHaveAttribute(

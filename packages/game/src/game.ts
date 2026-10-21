@@ -19,14 +19,31 @@ import { drawSensorOverlay } from "./render/sensor";
 import { DEFAULT_SEED, MAX_SEED, nextSeed, parseSeed } from "./seed";
 import { createSeedControls } from "./seed-controls";
 import { createSensorConsole } from "./sensor-console";
+import {
+  clampTimeScale,
+  createSimPanel,
+  SIM_TIME_SCALE_DEFAULT,
+  SIM_TIME_SCALE_MAX,
+  SIM_TIME_SCALE_MIN,
+  type SimPanelController,
+} from "./sim-panel";
+
+export {
+  clampTimeScale,
+  SIM_TIME_SCALE_DEFAULT,
+  SIM_TIME_SCALE_MAX,
+  SIM_TIME_SCALE_MIN,
+};
 
 export const MAX_FRAME_SECONDS = 0.25;
 export const MAX_STEPS_PER_FRAME = 120;
+export const MAX_STEPS_HARD_CAP = 1200;
 
 export interface GameOptions {
   seed?: number;
   simulation?: Simulation;
   autopilotFactory?: () => Controller;
+  timeScale?: number;
   now?: () => number;
   requestFrame?: (callback: (now: number) => void) => number;
   cancelFrame?: (handle: number) => void;
@@ -43,6 +60,8 @@ export interface Game {
   getState(): SimState;
   getSeed(): number;
   isAutopilotActive(): boolean;
+  getTimeScale(): number;
+  setTimeScale(scale: number): void;
   advance(elapsedSeconds: number): number;
   render(): void;
   resize(): void;
@@ -107,18 +126,27 @@ export function advanceAccumulator(
       ? Math.floor(maxSteps)
       : MAX_STEPS_PER_FRAME;
 
+  const tolerance = stepSize * 1e-9;
   let remaining = base + elapsed;
   let steps = 0;
-  while (remaining >= stepSize && steps < limit) {
+  while (remaining + tolerance >= stepSize && steps < limit) {
     remaining -= stepSize;
     steps += 1;
   }
 
-  if (steps >= limit) {
+  if (steps >= limit || Math.abs(remaining) < tolerance) {
     remaining = 0;
   }
 
   return { steps, accumulator: remaining };
+}
+
+export function maxStepsForTimeScale(timeScale: number): number {
+  const scale = clampTimeScale(timeScale);
+  return Math.min(
+    MAX_STEPS_HARD_CAP,
+    Math.ceil(MAX_STEPS_PER_FRAME * scale),
+  );
 }
 
 export function createGame(options: GameOptions = {}): Game {
@@ -166,6 +194,17 @@ export function createGame(options: GameOptions = {}): Game {
   let lastTime = now();
   let animationHandle: number | null = null;
   let running = false;
+  let timeScale = clampTimeScale(
+    options.timeScale ?? SIM_TIME_SCALE_DEFAULT,
+  );
+  let simPanel: SimPanelController | null = null;
+
+  const setTimeScale = (scale: number): void => {
+    timeScale = clampTimeScale(scale);
+    simPanel?.update(simulation.getState());
+  };
+
+  const getTimeScale = (): number => timeScale;
 
   const camera = createCamera();
   const hud = createHud();
@@ -182,6 +221,11 @@ export function createGame(options: GameOptions = {}): Game {
       simulation.setEyeSensorRadius(radius);
     },
   });
+  simPanel = createSimPanel({
+    simulation,
+    getTimeScale,
+    setTimeScale,
+  });
 
   const getAutopilot = (): Controller => {
     if (autopilotController === null) {
@@ -197,6 +241,7 @@ export function createGame(options: GameOptions = {}): Game {
     updateCamera(camera, state, deltaSeconds);
     hud.update(state, autopilotEnabled);
     sensorConsole.update(state);
+    simPanel?.update(state);
     renderer.render(state, simulation.field, camera);
   };
 
@@ -212,6 +257,7 @@ export function createGame(options: GameOptions = {}): Game {
     snapCamera(camera, state);
     hud.update(state, autopilotEnabled);
     sensorConsole.update(state);
+    simPanel?.update(state);
     sensorConsole.setVisible(autopilotEnabled);
     renderer.render(state, simulation.field, camera);
     lastTime = now();
@@ -239,6 +285,7 @@ export function createGame(options: GameOptions = {}): Game {
     const state = simulation.getState();
     hud.update(state, autopilotEnabled);
     sensorConsole.setVisible(autopilotEnabled);
+    simPanel?.update(state);
     renderer.render(state, simulation.field, camera);
   };
 
@@ -285,7 +332,13 @@ export function createGame(options: GameOptions = {}): Game {
   };
 
   const advance = (elapsedSeconds: number): number => {
-    const result = advanceAccumulator(accumulator, elapsedSeconds);
+    const scale = clampTimeScale(timeScale);
+    const result = advanceAccumulator(
+      accumulator,
+      elapsedSeconds * scale,
+      FIXED_DT,
+      maxStepsForTimeScale(scale),
+    );
     accumulator = result.accumulator;
 
     for (let step = 0; step < result.steps; step += 1) {
@@ -311,7 +364,7 @@ export function createGame(options: GameOptions = {}): Game {
     lastTime = time;
 
     advance(elapsed);
-    refresh(elapsed);
+    refresh(elapsed * clampTimeScale(timeScale));
 
     animationHandle = requestFrame(frame);
   };
@@ -350,12 +403,14 @@ export function createGame(options: GameOptions = {}): Game {
   hud.update(initialState, autopilotEnabled);
   sensorConsole.setVisible(autopilotEnabled);
   sensorConsole.update(initialState);
+  simPanel?.update(initialState);
   renderer.render(initialState, simulation.field, camera);
   lastTime = now();
 
   const dispose = (): void => {
     stop();
     window.removeEventListener("resize", handleResize);
+    simPanel?.dispose();
     changelog?.dispose();
   };
 
@@ -365,6 +420,8 @@ export function createGame(options: GameOptions = {}): Game {
     getState: () => simulation.getState(),
     getSeed: () => currentSeed,
     isAutopilotActive: () => autopilotEnabled,
+    getTimeScale,
+    setTimeScale,
     advance,
     render: () => {
       refresh(0);

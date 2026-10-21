@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FIXED_DT,
+  GRAVITY,
   createField,
   type Action,
   type Controller,
@@ -20,30 +21,13 @@ import {
   type GameOptions,
 } from "../src/game";
 import { nextSeed } from "../src/seed";
+import { FakeElement, FakeHTMLInputElement } from "./fake-dom";
 import {
-  FakeElement,
-  FakeHTMLInputElement,
-  installFakeDom,
-  type FakeCanvasElement,
-  type FakeDialogElement,
-  type FakeDom,
-} from "./fake-dom";
-import { deepFreeze, makeState } from "./fixtures";
-
-interface GameFixture {
-  dom: FakeDom;
-  seedInput: FakeHTMLInputElement;
-  seedLoad: FakeElement;
-  seedCopy: FakeElement;
-  chart: FakeCanvasElement;
-  slider: FakeHTMLInputElement;
-  panel: FakeElement;
-  radarStatus: FakeElement;
-  changelogButton: FakeElement;
-  changelogDialog: FakeDialogElement;
-  changelogClose: FakeElement;
-  changelogList: FakeElement;
-}
+  deepFreeze,
+  installGameFixture,
+  makeState,
+  type GameFixture,
+} from "./fixtures";
 
 interface ScriptedSimulation {
   simulation: Simulation;
@@ -70,6 +54,10 @@ function observationFor(state: SimState): Observation {
     forwardSpeed: 0,
     lateralSpeed: 0,
     eyeSensorRadius: state.eyeSensorRadius,
+    gravityScale: state.gravityScale,
+    gravity: state.gravity,
+    bottomThrusterScale: state.bottomThrusterScale,
+    rearThrusterScale: state.rearThrusterScale,
     sensors: state.sensors,
   };
 }
@@ -101,6 +89,19 @@ function createScriptedSimulation(
       setEyeSensorRadius: (radius: number): void => {
         state = { ...state, eyeSensorRadius: radius };
       },
+      setGravityScale: (scale: number): void => {
+        state = {
+          ...state,
+          gravityScale: scale,
+          gravity: GRAVITY * scale,
+        };
+      },
+      setBottomThrusterScale: (scale: number): void => {
+        state = { ...state, bottomThrusterScale: scale };
+      },
+      setRearThrusterScale: (scale: number): void => {
+        state = { ...state, rearThrusterScale: scale };
+      },
     },
     reset,
     step,
@@ -110,108 +111,10 @@ function createScriptedSimulation(
   };
 }
 
-function addClassedChild(
-  parent: FakeElement,
-  className: string,
-): FakeElement {
-  const child = new FakeElement("span");
-  child.classList.add(className);
-  return parent.appendChild(child);
-}
-
-function installGameFixture(search = ""): GameFixture {
-  const fakeDom = installFakeDom({ dpr: 1, width: 800, height: 600 });
-
-  const seedInput = fakeDom.addInput("seed-input");
-  const seedLoad = fakeDom.addElement("seed-load", "button");
-  const seedCopy = new FakeElement("button");
-  seedCopy.setAttribute("id", "seed-copy");
-
-  const querySelector = fakeDom.document.querySelector.bind(fakeDom.document);
-  fakeDom.document.querySelector = (selector: string) =>
-    selector === "#seed-copy" ? seedCopy : querySelector(selector);
-
-  for (const testId of [
-    "hud-hull",
-    "hud-speed",
-    "hud-progress",
-    "hud-score",
-  ]) {
-    addClassedChild(fakeDom.addElement(testId), "hud-value");
-  }
-
-  for (const testId of [
-    "thruster-left",
-    "thruster-right",
-    "thruster-rear",
-  ]) {
-    fakeDom.addElement(testId);
-  }
-
-  addClassedChild(
-    fakeDom.addElement("autopilot-status"),
-    "autopilot-value",
-  );
-  fakeDom.addElement("seed-display");
-
-  const outcome = fakeDom.addElement("outcome");
-  outcome.classList.add("hidden");
-  outcome.setAttribute("aria-hidden", "true");
-  addClassedChild(outcome, "outcome-text");
-  addClassedChild(outcome, "outcome-score-value");
-
-  const panel = fakeDom.addElement("eye-sensor-panel", "aside");
-  const chart = fakeDom.addCanvas("eye-sensor-chart");
-  chart.clientWidth = 374;
-  chart.clientHeight = 138;
-  const slider = fakeDom.addInput("eye-sensor-radius");
-  panel.appendChild(chart);
-  panel.appendChild(slider);
-  fakeDom.addElement("radar-status");
-
-  for (const testId of [
-    "eye-sensor-radius-value",
-    "eye-sensor-scan-tick",
-    "direction-needle",
-    "direction-value",
-    "distance-to-start",
-    "velocity-speed",
-    "velocity-vx",
-    "velocity-vy",
-    "velocity-angle",
-  ]) {
-    fakeDom.addElement(testId);
-  }
-
-  const changelogButton = fakeDom.addElement("changelog-button", "button");
-  const changelogDialog = fakeDom.addDialog("changelog-dialog");
-  const changelogClose = fakeDom.addElement("changelog-close", "button");
-  const changelogList = fakeDom.addElement("changelog-list", "div");
-
-  (fakeDom.window as unknown as { location: { search: string } }).location = {
-    search,
-  };
-
-  return {
-    dom: fakeDom,
-    seedInput,
-    seedLoad,
-    seedCopy,
-    chart,
-    slider,
-    panel,
-    radarStatus: fakeDom.document.element("radar-status")!,
-    changelogButton,
-    changelogDialog,
-    changelogClose,
-    changelogList,
-  };
-}
-
 let fixture: GameFixture;
 
 function setupGame(options: GameOptions = {}, search = ""): Game {
-  fixture = installGameFixture(search);
+  fixture = installGameFixture({ search });
   return createGame(options);
 }
 

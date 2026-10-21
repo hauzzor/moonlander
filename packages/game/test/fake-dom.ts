@@ -122,9 +122,12 @@ export class FakeElement extends FakeEventTarget {
   readonly classList = new FakeClassList();
   readonly children: FakeElement[] = [];
   readonly style = new FakeStyle();
+  parentElement: FakeElement | null = null;
   value = "";
   isContentEditable = false;
   disabled = false;
+  hidden = false;
+  inert = false;
   clientWidth = 0;
   clientHeight = 0;
   width = 0;
@@ -198,8 +201,32 @@ export class FakeElement extends FakeEventTarget {
   }
 
   appendChild<T extends FakeElement>(child: T): T {
+    child.parentElement = this;
     this.children.push(child);
     return child;
+  }
+
+  toggleAttribute(name: string, force?: boolean): boolean {
+    const active = force ?? !this.attributes.has(name);
+    if (active) {
+      this.setAttribute(name, "");
+    } else {
+      this.removeAttribute(name);
+    }
+    return active;
+  }
+
+  closest(selector: string): FakeElement | null {
+    let node: FakeElement | null = this;
+
+    while (node !== null) {
+      if (node.matches(selector)) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+
+    return null;
   }
 
   matches(selector: string): boolean {
@@ -222,7 +249,7 @@ export class FakeElement extends FakeEventTarget {
       return this.attributes.get("id") === selector.slice(1);
     }
 
-    return this.tagName === selector;
+    return this.tagName.toLowerCase() === selector.toLowerCase();
   }
 
   querySelector(selector: string): FakeElement | null {
@@ -240,8 +267,22 @@ export class FakeElement extends FakeEventTarget {
 }
 
 export class FakeHTMLInputElement extends FakeElement {
+  type = "text";
+  min = "";
+  max = "";
+  step = "";
+
   constructor(tagName = "input") {
     super(tagName);
+  }
+
+  get valueAsNumber(): number {
+    const trimmed = this.value.trim();
+    return trimmed.length === 0 ? Number.NaN : Number(trimmed);
+  }
+
+  set valueAsNumber(value: number) {
+    this.value = String(value);
   }
 }
 
@@ -413,6 +454,93 @@ export class FakeDialogElement extends FakeElement {
 
 export class FakeWindow extends FakeEventTarget {
   devicePixelRatio = 1;
+  readonly localStorage = new FakeStorage();
+  readonly sessionStorage = new FakeStorage();
+  readonly location = new FakeLocation();
+  readonly history = new FakeHistory(this.location);
+}
+
+export class FakeStorage {
+  private readonly values = new Map<string, string>();
+
+  get length(): number {
+    return this.values.size;
+  }
+
+  clear(): void {
+    this.values.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, String(value));
+  }
+}
+
+export class FakeLocation {
+  href = "http://localhost/";
+
+  get search(): string {
+    return new URL(this.href).search;
+  }
+
+  set search(value: string) {
+    const url = new URL(this.href);
+    url.search = value;
+    this.href = url.href;
+  }
+
+  get pathname(): string {
+    return new URL(this.href).pathname;
+  }
+
+  get hash(): string {
+    return new URL(this.href).hash;
+  }
+
+  set hash(value: string) {
+    const url = new URL(this.href);
+    url.hash = value;
+    this.href = url.href;
+  }
+}
+
+export interface HistoryCall {
+  url: string | null;
+}
+
+export class FakeHistory {
+  readonly replaceStateCalls: HistoryCall[] = [];
+
+  constructor(private readonly location: FakeLocation) {}
+
+  replaceState(
+    _data: unknown,
+    _title: string,
+    url?: string | URL | null,
+  ): void {
+    const next = url === undefined || url === null ? null : String(url);
+    this.replaceStateCalls.push({ url: next });
+
+    if (next !== null) {
+      this.location.href = new URL(next, this.location.href).href;
+    }
+  }
+
+  pushState(_data: unknown, _title: string, url?: string | URL | null): void {
+    this.replaceState(_data, _title, url);
+  }
 }
 
 export class FakeDocument extends FakeEventTarget {
@@ -430,9 +558,25 @@ export class FakeDocument extends FakeEventTarget {
   }
 
   createElement(tagName: string): FakeElement {
-    return tagName.toLowerCase() === "dialog"
-      ? new FakeDialogElement()
-      : new FakeElement(tagName);
+    const normalized = tagName.toLowerCase();
+
+    if (normalized === "dialog") {
+      return new FakeDialogElement();
+    }
+
+    if (normalized === "input") {
+      return new FakeHTMLInputElement();
+    }
+
+    if (normalized === "textarea") {
+      return new FakeHTMLTextAreaElement();
+    }
+
+    if (normalized === "canvas") {
+      return new FakeCanvasElement();
+    }
+
+    return new FakeElement(normalized);
   }
 
   querySelector(selector: string): FakeElement | null {

@@ -1,4 +1,4 @@
-import { GRAVITY, REAR_THRUSTER_FORCE, SHIP_MASS } from "./constants";
+import { REAR_THRUSTER_FORCE, SHIP_MASS } from "./constants";
 import type { Action, Controller, Observation } from "./types";
 
 const DEGREE_IN_RADIANS = Math.PI / 180;
@@ -68,12 +68,14 @@ export function createAutopilot(): Controller {
       const desiredNormalAcceleration = clamp(
         OFFSET_GAIN * (targetOffset - observation.tunnelCenterOffset) -
           LATERAL_SPEED_GAIN * observation.lateralSpeed,
-        -MAX_NORMAL_ACCELERATION,
-        MAX_NORMAL_ACCELERATION,
+        -MAX_NORMAL_ACCELERATION * observation.bottomThrusterScale,
+        MAX_NORMAL_ACCELERATION * observation.bottomThrusterScale,
       );
-      const gravityNormal = -GRAVITY * Math.cos(heading);
+      const gravityNormal = -observation.gravity * Math.cos(heading);
       const requiredThrustNormal =
         desiredNormalAcceleration - gravityNormal;
+      const rearAcceleration =
+        REAR_ACCELERATION * observation.rearThrusterScale;
       const steepness = Math.abs(Math.sin(heading));
       const diveAuthority = clamp(
         (-Math.sin(heading) - DIVE_AUTHORITY_START) / DIVE_AUTHORITY_RANGE,
@@ -87,7 +89,7 @@ export function createAutopilot(): Controller {
       if (requiredThrustNormal < 0 && diveAuthority > 0) {
         const demandedBias = Math.asin(
           clamp(
-            -requiredThrustNormal / REAR_ACCELERATION,
+            -requiredThrustNormal / rearAcceleration,
             0,
             Math.sin(MAX_ANGLE_BIAS) * diveAuthority,
           ),
@@ -104,10 +106,14 @@ export function createAutopilot(): Controller {
       );
       const angularVelocityError =
         targetAngularVelocity - observation.angularVelocity;
+      // More rear authority needs less bottom-thruster correction, so widen
+      // the bottom-turn deadband with it.
+      const turnDeadband =
+        TURN_DEADBAND * observation.rearThrusterScale;
       const turn =
-        angularVelocityError > TURN_DEADBAND
+        angularVelocityError > turnDeadband
           ? 1
-          : angularVelocityError < -TURN_DEADBAND
+          : angularVelocityError < -turnDeadband
             ? -1
             : 0;
 
