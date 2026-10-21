@@ -13,9 +13,9 @@
 > [One-session ticket execution and waves](#one-session-ticket-execution-and-waves).
 >
 > Only `release-engineer` commits and pushes. Delivery is a direct push to
-> `origin/main` after review and verification. CI deploys and runs live smoke on
-> every `main` push; the delivery task runs the live Playwright suite at
-> milestones. See [Delivery](#delivery).
+> `origin/main` after review and verification. CI deploys and runs the full live
+> Playwright suite on every `main` push; the delivery task also runs the live
+> suite at milestones. See [Delivery](#delivery).
 >
 > Development-cycle changes are not game code and are handled directly. See
 > [Development-cycle changes](#development-cycle-changes).
@@ -240,30 +240,24 @@ whether the push happened, the live URL, and the safest next action.
 
 ## Current rebuild
 
-The project is in a full rebuild from `docs/spec.md`. The previous game remains
-available on `backup/pre-rebuild` and in history.
+The project completed a full rebuild from `docs/spec.md`. The previous game
+remains available on `backup/pre-rebuild` and in history.
 
 - Baseline before the rebuild: 136 unit tests, 21 Playwright tests, typecheck,
   and production build all passed.
 - `docs/spec.md` wins over historical change briefs when they disagree.
 - The autopilot benchmark in the confirmed near-vertical brief (at least 200 m
   progress per seed, median at least 300 m, average world-x speed at least
-  4 m/s) supersedes the older 400/500/8 values in the spec. The contract ticket
-  must update the spec before implementation.
-- T-0003, T-0004, T-0005, T-0006, T-0007, and T-0008 are done. The remaining
-  rebuild is confirmed in `docs/changes/2026-10-20-parallel-ticket-execution.md`
-  and runs in waves:
-  1. T-0013, T-0015
-  2. T-0014, T-0016
-  3. T-0009
-  4. T-0010, T-0017
-  5. T-0011
-  6. T-0012
-- The confirmed wave plan supersedes the old sequential ticket order.
-- Execute waves under the fast wave protocol. Live verification runs at T-0013,
-  T-0009, T-0010, T-0011, and T-0012.
-
-T-0002 is blocked and superseded by the rebuild; do not run it.
+  4 m/s) superseded the older 400/500/8 values in the spec; the spec is current.
+- The rebuild is complete. T-0003 through T-0018 are done; T-0002 is blocked and
+  superseded.
+- Final report:
+  [`docs/changes/2026-10-21-rebuild-report.md`](docs/changes/2026-10-21-rebuild-report.md).
+- Final evidence: 631 unit tests, 40 local and live Playwright tests, typecheck
+  and production build, the 8-seed autopilot benchmark PASS, and a successful
+  GitHub Pages deployment at https://hauzzor.github.io/moonlander/.
+- The fast wave protocol remains the workflow for future changes. The confirmed
+  parallel ticket decomposition remains the historical record.
 
 ## Development-cycle changes
 
