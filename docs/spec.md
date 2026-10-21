@@ -605,8 +605,8 @@ Observation semantics:
   seed controls, eye-sensor console, direction needle, distance/velocity blocks,
   autopilot status, rear thruster, input-driven progress, restart, and the
   hidden outcome overlay.
-- CI runs typecheck, unit tests, browser tests, and production build.
-- A live Playwright smoke test runs against the deployed GitHub Pages URL.
+- CI runs typecheck, unit tests, `sim:demo`, browser tests, and production build.
+- The full live Playwright suite runs against the deployed GitHub Pages URL.
 
 ## Delivery
 

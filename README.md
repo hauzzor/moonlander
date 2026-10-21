@@ -45,9 +45,10 @@ fuel.
   zero wall contact, and targets maximum safe progress and speed. It is toggled
   with E.
 
-The tunnel is 68 m wide, enclosed, and endless in both directions. The first
-120 m is straight, then the seeded centerline bends gently rightward. The same
-seed and actions produce the same run.
+The tunnel is enclosed and endless in both directions. The first 120 m is
+straight and 68 m wide; after that the local width varies between 50 and 110 m
+total and the seeded centerline bends near-vertically (up to 85 degrees) without
+doubling back. The same seed and actions produce the same run.
 
 ## Project layout
 
@@ -73,6 +74,9 @@ matrix, and contract freeze are under [`docs/templates`](docs/templates/).
 
 ## Ticket runner
 
+This section describes background-runner mode. The current interactive mode uses
+one-session waves; see `AGENTS.md`.
+
 New work can be queued locally while the runner is busy with other tickets.
 
 ```powershell
@@ -92,8 +96,8 @@ implementation tickets per wave. `npm.cmd run tickets:plan` prints scope
 conflicts and suggested waves; shared files, verification, delivery, and live
 checks are serialized. Waves use a test contract, a wave context pack, focused
 review packets, fresh test and review sessions, and guarded sim-engineer reuse.
-Local verify runs every wave; live Playwright runs at T-0013, T-0009, T-0010,
-T-0011, and T-0012.
+Local verify runs every wave; live Playwright runs at the milestone tickets
+defined in `AGENTS.md`.
 
 The runner runs in a dedicated terminal and streams claims, agent sessions,
 test results, the merge queue, and delivery status. Use
@@ -126,8 +130,8 @@ The production build is emitted to `packages/game/dist`.
 ## Verification
 
 `npm.cmd run verify` runs typecheck, unit tests, browser tests, and the
-production build. Every push to `main` runs the same checks, deploys the built
-site to GitHub Pages, and runs the live Playwright smoke suite.
+production build. Every push to `main` runs the same checks plus `sim:demo`,
+deploys the built site to GitHub Pages, and runs the full live Playwright suite.
 
 `npm.cmd run deliver -- --message "feat: ..."` verifies the build, commits the
 staged changes, and pushes to `origin/main`. The delivery task runs the live

@@ -140,8 +140,9 @@ npm.cmd run sim:demo
 This runs the deterministic autopilot in Node. It prints finite telemetry every
 five seconds, including eye scan data, direction, distance to start, velocity,
 minimum wall clearance, and forward speed. It prints the final outcome, seed,
-progress, and score. It is a baseline for the controller interface, not a
-training implementation.
+progress, and score. It also runs the 8-seed, 60-second benchmark and the
+reduced 20 m eye-radius check and prints PASS/FAIL for each. It is a baseline for
+the controller interface, not a training implementation.
 
 ## Training loop shape
 
